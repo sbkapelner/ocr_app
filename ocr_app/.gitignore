@@ -1,0 +1,12 @@
+/target/
+*.pdf
+*.png
+debug.log
+Cargo.lock
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+*~
+*.bak

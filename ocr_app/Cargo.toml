@@ -1,0 +1,15 @@
+[package]
+name = "ocr_app"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ocrs = "0.10.0"
+rten = "0.16.0"
+rten-tensor = "0.16.0"
+rten-imageproc = "0.16.0"
+image = "0.24.7"
+lexopt = "0.3.0"
+mupdf = "0.4.4"
+temp-dir = "0.1.11"
+anyhow = "1.0"
