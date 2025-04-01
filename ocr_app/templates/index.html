@@ -9,6 +9,17 @@
             margin: 0 auto;
             padding: 20px;
         }
+        .upload-area {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            text-align: center;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .upload-area.drag-over {
+            border-color: #4CAF50;
+            background-color: #f1f8e9;
+        }
         button {
             padding: 10px 20px;
             font-size: 16px;
@@ -17,8 +28,13 @@
             color: white;
             border: none;
             border-radius: 4px;
+            margin: 10px 0;
         }
-        button:hover {
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        button:hover:not(:disabled) {
             background-color: #45a049;
         }
         #result {
@@ -26,20 +42,87 @@
             white-space: pre-wrap;
             font-family: monospace;
         }
+        #file-name {
+            margin-top: 10px;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
     <h1>OCR App</h1>
-    <button onclick="runOcr()">Run OCR on test2.pdf</button>
+    
+    <div class="upload-area" id="drop-zone">
+        <p>Drag and drop a PDF file here or</p>
+        <input type="file" id="file-input" accept=".pdf" style="display: none">
+        <button onclick="document.getElementById('file-input').click()">Choose File</button>
+        <div id="file-name"></div>
+    </div>
+
+    <button id="process-btn" onclick="processFile()" disabled>Process PDF</button>
     <div id="result"></div>
 
     <script>
-        async function runOcr() {
-            const result = document.getElementById('result');
+        let currentFile = null;
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileNameDisplay = document.getElementById('file-name');
+        const processBtn = document.getElementById('process-btn');
+        const result = document.getElementById('result');
+
+        // Handle drag and drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            const file = e.dataTransfer.files[0];
+            handleFile(file);
+        });
+
+        // Handle file input
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            handleFile(file);
+        });
+
+        function handleFile(file) {
+            if (file && file.type === 'application/pdf') {
+                currentFile = file;
+                fileNameDisplay.textContent = file.name;
+                processBtn.disabled = false;
+            } else {
+                alert('Please select a PDF file');
+                fileNameDisplay.textContent = '';
+                processBtn.disabled = true;
+                currentFile = null;
+            }
+        }
+
+        async function processFile() {
+            if (!currentFile) {
+                alert('Please select a PDF file first');
+                return;
+            }
+
             result.textContent = 'Processing...';
+            processBtn.disabled = true;
             
             try {
-                const response = await fetch('/process-test-pdf');
+                const formData = new FormData();
+                formData.append('pdf', currentFile);
+
+                const response = await fetch('/process-pdf', {
+                    method: 'POST',
+                    body: formData
+                });
+
                 const data = await response.json();
                 
                 // Format the results nicely
@@ -53,6 +136,8 @@
                 result.textContent = output;
             } catch (error) {
                 result.textContent = 'Error: ' + error.message;
+            } finally {
+                processBtn.disabled = false;
             }
         }
     </script>

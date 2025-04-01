@@ -3,13 +3,14 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use axum::{
-    extract::State,
+    extract::{Multipart, State},
     response::{Html, Json},
-    routing::get,
+    routing::{get, post},
     Router,
 };
 use ocrs::{OcrEngine, OcrEngineParams};
 use tower_http::services::ServeDir;
+use tempfile::NamedTempFile;
 
 /// Given a file path relative to the crate root, return the absolute path.
 fn file_path(path: &str) -> PathBuf {
@@ -29,14 +30,44 @@ async fn index() -> Html<String> {
     Html(index_html)
 }
 
-async fn process_test_pdf(State(state): State<Arc<AppState>>) -> Json<Vec<Vec<String>>> {
-    let test_pdf_path = file_path("test2.pdf");
-    
-    // Process PDF and get text from all pages
-    let texts = ocr_app::process_pdf(&state.engine, &test_pdf_path)
-        .expect("Failed to process PDF");
-    
-    Json(texts)
+async fn process_pdf(
+    State(state): State<Arc<AppState>>,
+    mut multipart: Multipart,
+) -> Result<Json<Vec<Vec<String>>>, String> {
+    // Get the PDF file from the form data
+    let field = multipart
+        .next_field()
+        .await
+        .map_err(|e| format!("Failed to get form field: {}", e))?;
+
+    if field.is_none() {
+        return Err("No file provided".to_string());
+    }
+
+    let field = field.unwrap();
+    if field.name() != Some("pdf") {
+        return Err("Invalid form field name".to_string());
+    }
+
+    // Read the file data
+    let data = field
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read file data: {}", e))?;
+
+    // Create a temporary file
+    let mut temp_file = NamedTempFile::new()
+        .map_err(|e| format!("Failed to create temporary file: {}", e))?;
+
+    // Write the data to the temporary file
+    std::io::Write::write_all(&mut temp_file, &data)
+        .map_err(|e| format!("Failed to write to temporary file: {}", e))?;
+
+    // Process the PDF
+    let texts = ocr_app::process_pdf(&state.engine, temp_file.path())
+        .map_err(|e| format!("Failed to process PDF: {}", e))?;
+
+    Ok(Json(texts))
 }
 
 #[tokio::main]
@@ -65,13 +96,13 @@ async fn main() -> Result<()> {
     // Create router
     let app = Router::new()
         .route("/", get(index))
-        .route("/process-test-pdf", get(process_test_pdf))
+        .route("/process-pdf", post(process_pdf))
         .nest_service("/static", ServeDir::new("static"))
         .with_state(state);
 
     // Start server
-    println!("Server running on http://localhost:3000");
-    let addr: std::net::SocketAddr = "0.0.0.0:3000".parse().unwrap();
+    println!("Server running on http://localhost:3001");
+    let addr: std::net::SocketAddr = "0.0.0.0:3001".parse().unwrap();
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await
         .context("Server error")?;
