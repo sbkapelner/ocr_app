@@ -13,3 +13,8 @@ lexopt = "0.3.0"
 mupdf = "0.4.4"
 temp-dir = "0.1.11"
 anyhow = "1.0"
+
+# Web server dependencies
+axum = { version = "0.7", features = ["multipart"] }
+tokio = { version = "1.0", features = ["full"] }
+tower-http = { version = "0.5", features = ["fs"] }

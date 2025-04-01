@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OCR App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #result {
+            margin-top: 20px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>OCR App</h1>
+    <button onclick="runOcr()">Run OCR on test2.pdf</button>
+    <div id="result"></div>
+
+    <script>
+        async function runOcr() {
+            const result = document.getElementById('result');
+            result.textContent = 'Processing...';
+            
+            try {
+                const response = await fetch('/process-test-pdf');
+                const data = await response.json();
+                
+                // Format the results nicely
+                let output = '';
+                data.forEach((page, index) => {
+                    output += `Text from page ${index + 1}:\n`;
+                    page.forEach(line => output += line + '\n');
+                    output += '\n';
+                });
+                
+                result.textContent = output;
+            } catch (error) {
+                result.textContent = 'Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
