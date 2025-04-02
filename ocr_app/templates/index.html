@@ -39,8 +39,67 @@
         }
         #result {
             margin-top: 20px;
-            white-space: pre-wrap;
             font-family: monospace;
+        }
+        .text-line {
+            cursor: pointer;
+            padding: 2px 5px;
+            margin: 2px 0;
+            border-radius: 3px;
+            transition: background-color 0.2s;
+        }
+        .text-line {
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .text-line:hover {
+            background-color: #f0f0f0;
+        }
+        .text-line.highlighted {
+            background-color: #fff59d;
+        }
+        .error {
+            color: #dc3545;
+            padding: 10px;
+        }
+        .page-section {
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .page-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .results-container {
+            display: flex;
+            gap: 20px;
+        }
+        .text-results {
+            flex: 2;
+        }
+        .numbers-panel {
+            flex: 1;
+            position: sticky;
+            top: 20px;
+            align-self: flex-start;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .numbers-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
         }
         #file-name {
             margin-top: 10px;
@@ -59,7 +118,13 @@
     </div>
 
     <button id="process-btn" onclick="processFile()" disabled>Process PDF</button>
-    <div id="result"></div>
+    <div class="results-container">
+        <div id="result" class="text-results"></div>
+        <div class="numbers-panel">
+            <div class="numbers-title">Extracted Numbers</div>
+            <div id="numbers-list"></div>
+        </div>
+    </div>
 
     <script>
         let currentFile = null;
@@ -123,19 +188,75 @@
                     body: formData
                 });
 
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
                 const data = await response.json();
                 
-                // Format the results nicely
-                let output = '';
-                data.forEach((page, index) => {
-                    output += `Text from page ${index + 1}:\n`;
-                    page.forEach(line => output += line + '\n');
-                    output += '\n';
+                // Clear previous results
+                result.innerHTML = '';
+                const numbersList = document.getElementById('numbers-list');
+                numbersList.innerHTML = '';
+                
+                // Extract all numbers from text, preserving original format
+                const numbers = new Set();
+                data.forEach(page => {
+                    page.forEach(line => {
+                        // Skip lines that start with FIG.
+                        if (!/^FIG\.?\s*\d+/.test(line.trim())) {
+                            // Split the line by spaces and check each part
+                            line.split(' ').forEach(part => {
+                                // Match any string that starts with numbers and may include hyphens, letters, or special characters
+                                const trimmed = part.trim();
+                                if (trimmed && /^\d+/.test(trimmed)) {  // If it starts with digits
+                                    numbers.add(trimmed);
+                                }
+                            });
+                        }
+                    });
                 });
                 
-                result.textContent = output;
+                // Display numbers in order of appearance
+                Array.from(numbers).forEach(num => {
+                    const numDiv = document.createElement('div');
+                    numDiv.className = 'text-line';
+                    numDiv.textContent = num;
+                    numDiv.onclick = function() {
+                        this.classList.toggle('highlighted');
+                    };
+                    numbersList.appendChild(numDiv);
+                });
+                
+                // Format the text results
+                data.forEach((page, pageIndex) => {
+                    const pageSection = document.createElement('div');
+                    pageSection.className = 'page-section';
+                    
+                    const pageTitle = document.createElement('div');
+                    pageTitle.className = 'page-title';
+                    pageTitle.textContent = `Text from page ${pageIndex + 1}`;
+                    pageSection.appendChild(pageTitle);
+                    
+                    page.forEach((line, lineIndex) => {
+                        if (line.trim()) {  // Only add non-empty lines
+                            const lineDiv = document.createElement('div');
+                            lineDiv.className = 'text-line';
+                            lineDiv.textContent = line;
+                            lineDiv.onclick = function() {
+                                this.classList.toggle('highlighted');
+                            };
+                            pageSection.appendChild(lineDiv);
+                        }
+                    });
+                    
+                    result.appendChild(pageSection);
+                });
+                
+
             } catch (error) {
-                result.textContent = 'Error: ' + error.message;
+                const numbersList = document.getElementById('numbers-list');
+                numbersList.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
             } finally {
                 processBtn.disabled = false;
             }
