@@ -63,8 +63,16 @@ pub fn pdf_page_to_image(doc: &Document, page_num: i32, dpi: f32) -> Result<RgbI
     Ok(img)
 }
 
-/// Process a single page and return the extracted text
-pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<String>> {
+#[derive(serde::Serialize)]
+pub struct OcrResult {
+    pub text: String,
+    pub bbox: [f32; 4],  // [x1, y1, x2, y2]
+}
+
+
+
+/// Process a single page and return the extracted text with bounding boxes
+pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResult>> {
     // Preprocess image to improve OCR
     for pixel in img.pixels_mut() {
         // Increase contrast
@@ -89,16 +97,42 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<String>
     let line_texts = engine.recognize_text(&ocr_input, &line_rects)
         .map_err(|e| anyhow::anyhow!("Failed to recognize text: {}", e))?;
 
-    // Filter and collect text lines
-    // Keep raw OCR output without filtering
-    Ok(line_texts
-        .iter()
-        .flatten()
-        .map(|l| l.to_string())
-        .collect())
+    // Convert results to our format with bounding boxes
+    let mut ocr_results = Vec::new();
+    let (width, height) = img.dimensions();
+    for (rects, texts) in line_rects.iter().zip(line_texts.iter()) {
+        if let Some(text) = texts {
+            // Get the bounding box that encompasses all rectangles in the line
+            let mut min_x = f32::MAX;
+            let mut min_y = f32::MAX;
+            let mut max_x = f32::MIN;
+            let mut max_y = f32::MIN;
+
+            for rect in rects {
+                let corners = rect.corners();
+                for corner in corners {
+                    min_x = min_x.min(corner.x);
+                    min_y = min_y.min(corner.y);
+                    max_x = max_x.max(corner.x);
+                    max_y = max_y.max(corner.y);
+                }
+            }
+
+            ocr_results.push(OcrResult {
+                text: text.to_string(),
+                bbox: [
+                    min_x / width as f32,   // Normalize coordinates
+                    min_y / height as f32,
+                    max_x / width as f32,
+                    max_y / height as f32,
+                ],
+            });
+        }
+    }
+    Ok(ocr_results)
 }
 
-pub fn process_pdf(engine: &OcrEngine, pdf_path: impl AsRef<Path>) -> Result<Vec<Vec<String>>> {
+pub fn process_pdf(engine: &OcrEngine, pdf_path: impl AsRef<Path>) -> Result<Vec<(RgbImage, Vec<OcrResult>)>> {
     // Open PDF document
     let doc = Document::open(pdf_path.as_ref().to_str().unwrap())
         .context("Failed to open PDF file")?;
@@ -107,7 +141,7 @@ pub fn process_pdf(engine: &OcrEngine, pdf_path: impl AsRef<Path>) -> Result<Vec
     let page_count = doc.page_count()
         .context("Failed to get page count")?;
 
-    let mut all_text = Vec::new();
+    let mut results = Vec::new();
 
     // Process each page
     for page_num in 0..page_count {
@@ -115,12 +149,12 @@ pub fn process_pdf(engine: &OcrEngine, pdf_path: impl AsRef<Path>) -> Result<Vec
         let img = pdf_page_to_image(&doc, page_num, 300.0)
             .context(format!("Failed to convert page {} to image", page_num + 1))?;
 
-        // Process the page and extract text
-        let text = process_page(engine, img)
+        // Process the page and extract text with bounding boxes
+        let ocr_results = process_page(engine, img.clone())
             .context(format!("Failed to process page {}", page_num + 1))?;
 
-        all_text.push(text);
+        results.push((img, ocr_results));
     }
 
-    Ok(all_text)
+    Ok(results)
 }

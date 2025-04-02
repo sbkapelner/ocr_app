@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::io::Cursor;
 
 use anyhow::{Context, Result};
 use axum::{
@@ -11,6 +12,20 @@ use axum::{
 use ocrs::{OcrEngine, OcrEngineParams};
 use tower_http::services::ServeDir;
 use tempfile::NamedTempFile;
+use image::ImageOutputFormat;
+use base64;
+use ocr_app::OcrResult;
+
+#[derive(serde::Serialize)]
+struct ProcessResponse {
+    pages: Vec<PageResult>,
+}
+
+#[derive(serde::Serialize)]
+struct PageResult {
+    image: String,  // Base64 encoded image
+    ocr_results: Vec<OcrResult>,
+}
 
 /// Given a file path relative to the crate root, return the absolute path.
 fn file_path(path: &str) -> PathBuf {
@@ -33,7 +48,7 @@ async fn index() -> Html<String> {
 async fn process_pdf(
     State(state): State<Arc<AppState>>,
     mut multipart: Multipart,
-) -> Result<Json<Vec<Vec<String>>>, String> {
+) -> Result<Json<ProcessResponse>, String> {
     // Get the PDF file from the form data
     let field = multipart
         .next_field()
@@ -64,10 +79,25 @@ async fn process_pdf(
         .map_err(|e| format!("Failed to write to temporary file: {}", e))?;
 
     // Process the PDF
-    let texts = ocr_app::process_pdf(&state.engine, temp_file.path())
+    let results = ocr_app::process_pdf(&state.engine, temp_file.path())
         .map_err(|e| format!("Failed to process PDF: {}", e))?;
 
-    Ok(Json(texts))
+    // Convert results to response format
+    let pages = results.into_iter().map(|(img, ocr_results)| {
+        // Convert image to base64
+        let mut img_data = Vec::new();
+        img.write_to(&mut Cursor::new(&mut img_data), image::ImageOutputFormat::Png)
+            .map_err(|e| format!("Failed to encode image: {}", e))?;
+        let img_base64 = base64::encode(&img_data);
+
+        Ok(PageResult {
+            image: format!("data:image/png;base64,{}", img_base64),
+            ocr_results,
+        })
+    }).collect::<Result<Vec<_>, String>>()?;
+
+    // Return the results
+    Ok(Json(ProcessResponse { pages }))
 }
 
 #[tokio::main]

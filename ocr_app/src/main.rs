@@ -61,17 +61,56 @@ fn main() -> Result<()> {
         ..Default::default()
     }).map_err(|e| anyhow::anyhow!("Failed to initialize OCR engine: {}", e))?;
 
-    // Process PDF and get text from all pages
-    let texts = ocr_app::process_pdf(&engine, &args.pdf_path)
+    // Process PDF and get text and images from all pages
+    let results = ocr_app::process_pdf(&engine, &args.pdf_path)
         .context("Failed to process PDF")?;
 
-    // Print extracted text
-    for (i, text) in texts.iter().enumerate() {
+    // Print extracted text and save images
+    for (i, (image, ocr_results)) in results.iter().enumerate() {
         println!("Text from page {}:", i + 1);
-        for line in text {
-            println!("{}", line);
+        for result in ocr_results {
+            println!("{}", result.text);
         }
         println!();
+
+        // Save the image with bounding boxes
+        let mut output_image = image.clone();
+        for result in ocr_results {
+            // Convert normalized coordinates back to pixel coordinates
+            let [x1, y1, x2, y2] = result.bbox;
+            let width = output_image.width() as f32;
+            let height = output_image.height() as f32;
+            let x1 = (x1 * width) as u32;
+            let y1 = (y1 * height) as u32;
+            let x2 = (x2 * width) as u32;
+            let y2 = (y2 * height) as u32;
+
+            // Draw red rectangle
+            for x in x1..=x2 {
+                if x < output_image.width() {
+                    if y1 < output_image.height() {
+                        output_image.put_pixel(x, y1, image::Rgb([255, 0, 0]));
+                    }
+                    if y2 < output_image.height() {
+                        output_image.put_pixel(x, y2, image::Rgb([255, 0, 0]));
+                    }
+                }
+            }
+            for y in y1..=y2 {
+                if y < output_image.height() {
+                    if x1 < output_image.width() {
+                        output_image.put_pixel(x1, y, image::Rgb([255, 0, 0]));
+                    }
+                    if x2 < output_image.width() {
+                        output_image.put_pixel(x2, y, image::Rgb([255, 0, 0]));
+                    }
+                }
+            }
+        }
+
+        // Save the image
+        output_image.save(format!("output_page_{}.png", i + 1))
+            .context(format!("Failed to save output image for page {}", i + 1))?;
     }
 
     Ok(())
