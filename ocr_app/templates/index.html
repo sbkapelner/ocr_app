@@ -83,6 +83,88 @@
         .pages-container {
             flex: 3;
             margin-right: 20px;
+            display: flex;
+            gap: 20px;
+        }
+
+        .thumbnail-nav {
+            width: 120px;
+            height: 80vh;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding: 15px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            flex-shrink: 0;
+            scrollbar-width: thin;
+            scrollbar-color: #007bff #f8f9fa;
+        }
+
+        .thumbnail-nav::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .thumbnail-nav::-webkit-scrollbar-track {
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .thumbnail-nav::-webkit-scrollbar-thumb {
+            background-color: #007bff;
+            border-radius: 4px;
+            border: 2px solid #f8f9fa;
+        }
+
+        .thumbnail {
+            width: 100%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            border-radius: 4px;
+            transition: all 0.2s;
+            object-fit: cover;
+            background: white;
+            padding: 4px;
+            aspect-ratio: 1;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .thumbnail:hover {
+            border-color: #0056b3;
+        }
+
+        .thumbnail.active {
+            border-color: #007bff;
+            box-shadow: 0 0 5px rgba(0,123,255,0.5);
+        }
+
+        .pages-viewer {
+            flex: 1;
+            overflow-y: auto;
+            height: 80vh;
+            padding: 30px;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            scrollbar-width: thin;
+            scrollbar-color: #007bff #fff;
+        }
+
+        .pages-viewer::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .pages-viewer::-webkit-scrollbar-track {
+            background: #fff;
+            border-radius: 4px;
+        }
+
+        .pages-viewer::-webkit-scrollbar-thumb {
+            background-color: #007bff;
+            border-radius: 4px;
+            border: 2px solid #fff;
         }
         .page-container {
             margin-bottom: 40px;
@@ -270,6 +352,29 @@
                     numbersList.appendChild(numDiv);
                 });
 
+                // Create thumbnail navigation
+                const thumbnailNav = document.createElement('div');
+                thumbnailNav.className = 'thumbnail-nav';
+                const pagesViewer = document.createElement('div');
+                pagesViewer.className = 'pages-viewer';
+
+                // Create thumbnails
+                data.pages.forEach((page, pageIndex) => {
+                    const thumbnail = document.createElement('img');
+                    thumbnail.src = page.image;
+                    thumbnail.className = 'thumbnail';
+                    thumbnail.onclick = () => {
+                        // Update active state
+                        thumbnailNav.querySelectorAll('.thumbnail').forEach((t, i) => {
+                            t.classList.toggle('active', i === pageIndex);
+                        });
+                        // Scroll to the selected page
+                        const targetPage = pagesViewer.children[pageIndex];
+                        targetPage.scrollIntoView({ behavior: 'smooth' });
+                    };
+                    thumbnailNav.appendChild(thumbnail);
+                });
+
                 // Display pages with bounding boxes
                 data.pages.forEach((page, pageIndex) => {
                     const pageContainer = document.createElement('div');
@@ -302,12 +407,19 @@
                     };
                     pageContainer.appendChild(img);
 
-                    pagesContainer.appendChild(pageContainer);
+                    pagesViewer.appendChild(pageContainer);
                 });
 
                 // Add containers to results
+                pagesContainer.appendChild(thumbnailNav);
+                pagesContainer.appendChild(pagesViewer);
                 resultsContainer.appendChild(pagesContainer);
                 resultsContainer.appendChild(numbersPanel);
+
+                // Activate first thumbnail
+                if (data.pages.length > 0) {
+                    thumbnailNav.firstChild.classList.add('active');
+                }
             } catch (error) {
                 const resultsContainer = document.getElementById('results');
                 resultsContainer.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
