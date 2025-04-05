@@ -16,6 +16,8 @@ lexopt = "0.3.0"
 mupdf = "0.4.4"
 temp-dir = "0.1.11"
 anyhow = "1.0"
+regex = "1.10.2"
+docx-rs = "0.4.7"
 
 # Web server dependencies
 axum = { version = "0.7", features = ["multipart"] }

@@ -12,13 +12,18 @@ use axum::{
 use ocrs::{OcrEngine, OcrEngineParams};
 use tower_http::services::ServeDir;
 use tempfile::NamedTempFile;
-use image::ImageOutputFormat;
-use base64;
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use ocr_app::OcrResult;
 
 #[derive(serde::Serialize)]
 struct ProcessResponse {
     pages: Vec<PageResult>,
+}
+
+#[derive(serde::Serialize)]
+struct DocxProcessResponse {
+    numbers: Vec<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -48,7 +53,7 @@ async fn index() -> Html<String> {
 async fn process_docx(
     State(state): State<Arc<AppState>>,
     mut multipart: Multipart,
-) -> Result<Json<ProcessResponse>, String> {
+) -> Result<Json<DocxProcessResponse>, String> {
     // Get the DOCX file from the form data
     let field = multipart
         .next_field()
@@ -82,22 +87,10 @@ async fn process_docx(
     let results = ocr_app::process_docx(&state.engine, temp_file.path())
         .map_err(|e| format!("Failed to process DOCX: {}", e))?;
 
-    // Convert results to response format
-    let pages = results.into_iter().map(|(img, ocr_results)| {
-        // Convert image to base64
-        let mut img_data = Vec::new();
-        img.write_to(&mut Cursor::new(&mut img_data), image::ImageOutputFormat::Png)
-            .map_err(|e| format!("Failed to encode image: {}", e))?;
-        let img_base64 = base64::encode(&img_data);
-
-        Ok(PageResult {
-            image: format!("data:image/png;base64,{}", img_base64),
-            ocr_results,
-        })
-    }).collect::<Result<Vec<_>, String>>()?;
-
     // Return the results
-    Ok(Json(ProcessResponse { pages }))
+    Ok(Json(DocxProcessResponse { 
+        numbers: results.numbers
+    }))
 }
 
 async fn process_pdf(
@@ -143,7 +136,7 @@ async fn process_pdf(
         let mut img_data = Vec::new();
         img.write_to(&mut Cursor::new(&mut img_data), image::ImageOutputFormat::Png)
             .map_err(|e| format!("Failed to encode image: {}", e))?;
-        let img_base64 = base64::encode(&img_data);
+        let img_base64 = STANDARD.encode(&img_data);
 
         Ok(PageResult {
             image: format!("data:image/png;base64,{}", img_base64),

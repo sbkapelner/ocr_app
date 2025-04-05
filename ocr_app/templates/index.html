@@ -50,8 +50,32 @@
         .text-line {
             padding: 5px 10px;
             border-radius: 4px;
-            cursor: pointer;
+            cursor: help;
             transition: all 0.2s;
+            display: flex;
+            align-items: center;
+        }
+
+        .numbers-section {
+            margin-bottom: 20px;
+        }
+
+        .text-line.match {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .text-line.pdf-only {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .text-line.docx-only {
+            background: #cce5ff;
+            color: #004085;
+            border: 1px solid #b8daff;
         }
         .text-line:hover {
             background-color: #f0f0f0;
@@ -351,7 +375,19 @@
             pagesContainer.className = 'pages-container';
             const numbersPanel = document.createElement('div');
             numbersPanel.className = 'numbers-panel';
-            numbersPanel.innerHTML = '<div class="numbers-title">Extracted Numbers</div><div class="numbers-list"></div>';
+            numbersPanel.innerHTML = `
+                <div class="numbers-section">
+                    <div class="numbers-title">Numbers in Both Files (PDF & DOCX)</div>
+                    <div class="matching-list"></div>
+                </div>
+                <div class="numbers-section">
+                    <div class="numbers-title">Numbers Only in PDF</div>
+                    <div class="pdf-only-list"></div>
+                </div>
+                <div class="numbers-section">
+                    <div class="numbers-title">Numbers Only in DOCX</div>
+                    <div class="docx-only-list"></div>
+                </div>`;
 
             // Extract all numbers and track their bounding boxes
             const numbers = new Set();
@@ -365,7 +401,8 @@
                     if (!/^FIG\.?\s*\d+/.test(result.text.trim())) {
                         result.text.split(' ').forEach(part => {
                             const trimmed = part.trim();
-                            if (trimmed && /^\d+/.test(trimmed)) {
+                            // Use the same regex pattern as in the Rust code
+                            if (trimmed && /\b\d+[a-zA-Z]?\b|\b\d+-\d+[a-zA-Z]?\b/.test(trimmed)) {
                                 numbers.add(trimmed);
                                 if (!numberBoxes.has(trimmed)) {
                                     numberBoxes.set(trimmed, []);
@@ -383,13 +420,41 @@
             console.log('Found numbers:', Array.from(numbers));
             console.log('Number boxes:', numberBoxes);
 
-            // Display numbers in order of appearance
-            const numbersList = numbersPanel.querySelector('.numbers-list');
+            const matchingList = numbersPanel.querySelector('.matching-list');
+            const pdfOnlyList = numbersPanel.querySelector('.pdf-only-list');
+            const docxOnlyList = numbersPanel.querySelector('.docx-only-list');
+
+            // Numbers found in both files
             Array.from(numbers).forEach(num => {
-                const numDiv = document.createElement('div');
-                numDiv.className = 'text-line';
-                numDiv.textContent = num;
-                numbersList.appendChild(numDiv);
+                if (docxNumbers.has(num)) {
+                    const numDiv = document.createElement('div');
+                    numDiv.className = 'text-line match';
+                    numDiv.title = 'Found in both PDF and DOCX';
+                    numDiv.textContent = num;
+                    matchingList.appendChild(numDiv);
+                }
+            });
+
+            // Numbers only in PDF
+            Array.from(numbers).forEach(num => {
+                if (!docxNumbers.has(num)) {
+                    const numDiv = document.createElement('div');
+                    numDiv.className = 'text-line pdf-only';
+                    numDiv.title = 'Found only in PDF';
+                    numDiv.textContent = num;
+                    pdfOnlyList.appendChild(numDiv);
+                }
+            });
+
+            // Numbers only in DOCX
+            Array.from(docxNumbers).forEach(num => {
+                if (!numbers.has(num)) {
+                    const numDiv = document.createElement('div');
+                    numDiv.className = 'text-line docx-only';
+                    numDiv.title = 'Found only in DOCX';
+                    numDiv.textContent = num;
+                    docxOnlyList.appendChild(numDiv);
+                }
             });
 
             // Create thumbnail navigation
@@ -456,6 +521,8 @@
             }
         }
 
+        let docxNumbers = new Set(); // Store DOCX numbers globally
+
         async function processFile() {
             if (!currentPdfFile || !currentDocxFile) {
                 alert('Please select both PDF and DOCX files first');
@@ -467,7 +534,24 @@
             processBtn.disabled = true;
             
             try {
-                // First process PDF
+                // First process DOCX to get reference numbers
+                const docxFormData = new FormData();
+                docxFormData.append('docx', currentDocxFile);
+
+                const docxResponse = await fetch('/process-docx', {
+                    method: 'POST',
+                    body: docxFormData
+                });
+
+                if (!docxResponse.ok) {
+                    throw new Error(`HTTP error! status: ${docxResponse.status}`);
+                }
+
+                const docxData = await docxResponse.json();
+                docxNumbers = new Set(docxData.numbers); // Store for comparison
+                console.log('DOCX Numbers:', docxData.numbers);
+
+                // Then process PDF
                 const pdfFormData = new FormData();
                 pdfFormData.append('pdf', currentPdfFile);
 
@@ -482,42 +566,18 @@
 
                 const pdfData = await pdfResponse.json();
 
-                // Then process DOCX
-                const docxFormData = new FormData();
-                docxFormData.append('docx', currentDocxFile);
-
-                const docxResponse = await fetch('/process-docx', {
-                    method: 'POST',
-                    body: docxFormData
-                });
-
-                if (!docxResponse.ok) {
-                    throw new Error(`HTTP error! status: ${docxResponse.status}`);
-                }
-
-                const docxData = await docxResponse.json();
-
                 // Clear previous results
                 resultsContainer.innerHTML = '';
                 
-                // Create containers for pages and numbers
+                // Create container for PDF results
                 const pdfContainer = document.createElement('div');
                 pdfContainer.className = 'file-container';
-                pdfContainer.innerHTML = '<h2>PDF Results</h2>';
-                
-                const docxContainer = document.createElement('div');
-                docxContainer.className = 'file-container';
-                docxContainer.innerHTML = '<h2>DOCX Results</h2>';
 
-                // Process and display PDF results
+                // Process and display only PDF results
                 displayResults(pdfData, pdfContainer);
-                
-                // Process and display DOCX results
-                displayResults(docxData, docxContainer);
 
-                // Add containers to results
+                // Add container to results
                 resultsContainer.appendChild(pdfContainer);
-                resultsContainer.appendChild(docxContainer);
 
             } catch (error) {
                 resultsContainer.innerHTML = '<div class="error">Error: ' + error.message + '</div>';

@@ -1,8 +1,11 @@
 use std::path::Path;
+use std::collections::HashSet;
 use anyhow::{Context, Result};
 use image::{ImageBuffer, Rgb, RgbImage};
 use mupdf::{Colorspace, Device, Document, Matrix, Pixmap};
-use ocrs::{ImageSource, OcrEngine, OcrEngineParams};
+use ocrs::{ImageSource, OcrEngine};
+use regex::Regex;
+use docx_rs;
 
 pub mod models;
 
@@ -69,6 +72,11 @@ pub struct OcrResult {
     pub bbox: [f32; 4],  // [x1, y1, x2, y2]
 }
 
+#[derive(serde::Serialize)]
+pub struct DocxResult {
+    pub numbers: Vec<String>,  // Extracted numbers in order of appearance
+}
+
 
 
 /// Process a single page and return the extracted text with bounding boxes
@@ -132,9 +140,57 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
     Ok(ocr_results)
 }
 
-pub fn process_docx(engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<Vec<(RgbImage, Vec<OcrResult>)>> {
-    // TODO: Implement DOCX processing
-    Ok(Vec::new())
+pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<DocxResult> {
+    // Read DOCX file
+    let docx_content = std::fs::read(docx_path)
+        .context("Failed to read DOCX file")?;
+    let docx = docx_rs::read_docx(&docx_content)
+        .context("Failed to parse DOCX file")?;
+
+    // Extract all text from the document
+    let mut text = String::new();
+    for child in docx.document.children {
+        if let docx_rs::DocumentChild::Paragraph(para) = child {
+            for child in para.children {
+                if let docx_rs::ParagraphChild::Run(run) = child {
+                    for child in run.children {
+                        if let docx_rs::RunChild::Text(text_content) = child {
+                            text.push_str(&text_content.text);
+                            text.push(' ');
+                        }
+                    }
+                }
+            }
+            text.push('\n');
+        }
+    }
+
+    // Create regex patterns for different number formats
+    let number_pattern = Regex::new(r"\b\d+[a-zA-Z]?\b|\b\d+-\d+[a-zA-Z]?\b")
+        .context("Failed to create regex pattern")?;
+
+    // Extract unique numbers using regex
+    let mut numbers = HashSet::new();
+    for cap in number_pattern.find_iter(&text) {
+        numbers.insert(cap.as_str().to_string());
+    }
+
+    // Convert to sorted vector
+    let mut numbers_vec: Vec<String> = numbers.into_iter().collect();
+    numbers_vec.sort_by(|a, b| {
+        // First try to parse as integers for numerical sorting
+        let a_num = a.chars().take_while(|c| c.is_digit(10)).collect::<String>();
+        let b_num = b.chars().take_while(|c| c.is_digit(10)).collect::<String>();
+        
+        match (a_num.parse::<i32>(), b_num.parse::<i32>()) {
+            (Ok(a_val), Ok(b_val)) => a_val.cmp(&b_val),
+            _ => a.cmp(b) // Fall back to string comparison if parsing fails
+        }
+    });
+
+    Ok(DocxResult {
+        numbers: numbers_vec
+    })
 }
 
 pub fn process_pdf(engine: &OcrEngine, pdf_path: impl AsRef<Path>) -> Result<Vec<(RgbImage, Vec<OcrResult>)>> {
