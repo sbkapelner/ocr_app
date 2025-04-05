@@ -132,6 +132,11 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
     Ok(ocr_results)
 }
 
+pub fn process_docx(engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<Vec<(RgbImage, Vec<OcrResult>)>> {
+    // TODO: Implement DOCX processing
+    Ok(Vec::new())
+}
+
 pub fn process_pdf(engine: &OcrEngine, pdf_path: impl AsRef<Path>) -> Result<Vec<(RgbImage, Vec<OcrResult>)>> {
     // Open PDF document
     let doc = Document::open(pdf_path.as_ref().to_str().unwrap())

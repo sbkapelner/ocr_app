@@ -45,6 +45,61 @@ async fn index() -> Html<String> {
     Html(index_html)
 }
 
+async fn process_docx(
+    State(state): State<Arc<AppState>>,
+    mut multipart: Multipart,
+) -> Result<Json<ProcessResponse>, String> {
+    // Get the DOCX file from the form data
+    let field = multipart
+        .next_field()
+        .await
+        .map_err(|e| format!("Failed to get form field: {}", e))?;
+
+    if field.is_none() {
+        return Err("No file provided".to_string());
+    }
+
+    let field = field.unwrap();
+    if field.name() != Some("docx") {
+        return Err("Invalid form field name".to_string());
+    }
+
+    // Read the file data
+    let data = field
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read file data: {}", e))?;
+
+    // Create a temporary file
+    let mut temp_file = NamedTempFile::new()
+        .map_err(|e| format!("Failed to create temporary file: {}", e))?;
+
+    // Write the data to the temporary file
+    std::io::Write::write_all(&mut temp_file, &data)
+        .map_err(|e| format!("Failed to write to temporary file: {}", e))?;
+
+    // Process the DOCX
+    let results = ocr_app::process_docx(&state.engine, temp_file.path())
+        .map_err(|e| format!("Failed to process DOCX: {}", e))?;
+
+    // Convert results to response format
+    let pages = results.into_iter().map(|(img, ocr_results)| {
+        // Convert image to base64
+        let mut img_data = Vec::new();
+        img.write_to(&mut Cursor::new(&mut img_data), image::ImageOutputFormat::Png)
+            .map_err(|e| format!("Failed to encode image: {}", e))?;
+        let img_base64 = base64::encode(&img_data);
+
+        Ok(PageResult {
+            image: format!("data:image/png;base64,{}", img_base64),
+            ocr_results,
+        })
+    }).collect::<Result<Vec<_>, String>>()?;
+
+    // Return the results
+    Ok(Json(ProcessResponse { pages }))
+}
+
 async fn process_pdf(
     State(state): State<Arc<AppState>>,
     mut multipart: Multipart,
@@ -127,6 +182,7 @@ async fn main() -> Result<()> {
     let app = Router::new()
         .route("/", get(index))
         .route("/process-pdf", post(process_pdf))
+        .route("/process-docx", post(process_docx))
         .nest_service("/static", ServeDir::new("static"))
         .with_state(state);
 

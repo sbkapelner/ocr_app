@@ -103,6 +103,21 @@
             scrollbar-color: #007bff #f8f9fa;
         }
 
+        .file-container {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fff;
+        }
+
+        .file-container h2 {
+            margin: 0 0 20px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #eee;
+            color: #333;
+        }
+
         .thumbnail-nav::-webkit-scrollbar {
             width: 8px;
         }
@@ -235,8 +250,7 @@
     </div>
 
     <div style="display: flex; gap: 10px;">
-        <button id="process-pdf-btn" onclick="processFile()" disabled style="background-color: #dc3545;">Process PDF</button>
-        <button id="process-docx-btn" disabled style="background-color: #007bff;">Process DOCX</button>
+        <button id="process-btn" onclick="processFile()" disabled>Process Files</button>
     </div>
     <div id="result" style="display: none;"></div>
     <div id="results" class="results-container"></div>
@@ -250,8 +264,7 @@
         const docxInput = document.getElementById('docx-input');
         const pdfNameDisplay = document.getElementById('pdf-name');
         const docxNameDisplay = document.getElementById('docx-name');
-        const processPdfBtn = document.getElementById('process-pdf-btn');
-        const processDocxBtn = document.getElementById('process-docx-btn');
+        const processBtn = document.getElementById('process-btn');
         const result = document.getElementById('result');
 
         // Handle PDF drag and drop
@@ -303,11 +316,11 @@
             if (file && file.type === 'application/pdf') {
                 currentPdfFile = file;
                 pdfNameDisplay.textContent = file.name;
-                processPdfBtn.disabled = false;
+                updateProcessButton();
             } else {
                 alert('Please select a PDF file');
                 pdfNameDisplay.textContent = '';
-                processPdfBtn.disabled = true;
+                updateProcessButton();
                 currentPdfFile = null;
             }
         }
@@ -316,164 +329,197 @@
             if (file && file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
                 currentDocxFile = file;
                 docxNameDisplay.textContent = file.name;
-                processDocxBtn.disabled = false;
+                updateProcessButton();
             } else {
                 alert('Please select a DOCX file');
                 docxNameDisplay.textContent = '';
-                processDocxBtn.disabled = true;
+                updateProcessButton();
                 currentDocxFile = null;
             }
         }
 
+        function updateProcessButton() {
+            // Enable the process button only if both files are selected
+            processBtn.disabled = !currentPdfFile || !currentDocxFile;
+        }
+
+
+
+        function displayResults(data, container) {
+            // Create containers for pages and numbers
+            const pagesContainer = document.createElement('div');
+            pagesContainer.className = 'pages-container';
+            const numbersPanel = document.createElement('div');
+            numbersPanel.className = 'numbers-panel';
+            numbersPanel.innerHTML = '<div class="numbers-title">Extracted Numbers</div><div class="numbers-list"></div>';
+
+            // Extract all numbers and track their bounding boxes
+            const numbers = new Set();
+            const numberBoxes = new Map();
+            
+            data.pages.forEach((page, pageIndex) => {
+                console.log(`Page ${pageIndex + 1} has ${page.ocr_results.length} OCR results`);
+                page.ocr_results.forEach(result => {
+                    console.log(`OCR result: '${result.text}' at bbox:`, result.bbox);
+                    
+                    if (!/^FIG\.?\s*\d+/.test(result.text.trim())) {
+                        result.text.split(' ').forEach(part => {
+                            const trimmed = part.trim();
+                            if (trimmed && /^\d+/.test(trimmed)) {
+                                numbers.add(trimmed);
+                                if (!numberBoxes.has(trimmed)) {
+                                    numberBoxes.set(trimmed, []);
+                                }
+                                numberBoxes.get(trimmed).push({
+                                    pageIndex,
+                                    bbox: result.bbox
+                                });
+                            }
+                        });
+                    }
+                });
+            });
+            
+            console.log('Found numbers:', Array.from(numbers));
+            console.log('Number boxes:', numberBoxes);
+
+            // Display numbers in order of appearance
+            const numbersList = numbersPanel.querySelector('.numbers-list');
+            Array.from(numbers).forEach(num => {
+                const numDiv = document.createElement('div');
+                numDiv.className = 'text-line';
+                numDiv.textContent = num;
+                numbersList.appendChild(numDiv);
+            });
+
+            // Create thumbnail navigation
+            const thumbnailNav = document.createElement('div');
+            thumbnailNav.className = 'thumbnail-nav';
+            const pagesViewer = document.createElement('div');
+            pagesViewer.className = 'pages-viewer';
+
+            // Create thumbnails
+            data.pages.forEach((page, pageIndex) => {
+                const thumbnail = document.createElement('img');
+                thumbnail.src = page.image;
+                thumbnail.className = 'thumbnail';
+                thumbnail.onclick = () => {
+                    thumbnailNav.querySelectorAll('.thumbnail').forEach((t, i) => {
+                        t.classList.toggle('active', i === pageIndex);
+                    });
+                    const targetPage = pagesViewer.children[pageIndex];
+                    targetPage.scrollIntoView({ behavior: 'smooth' });
+                };
+                thumbnailNav.appendChild(thumbnail);
+            });
+
+            // Display pages with bounding boxes
+            data.pages.forEach((page, pageIndex) => {
+                const pageContainer = document.createElement('div');
+                pageContainer.className = 'page-container';
+                
+                const img = document.createElement('img');
+                img.src = page.image;
+                img.onload = () => {
+                    page.ocr_results.forEach(result => {
+                        const bbox = document.createElement('div');
+                        bbox.className = 'bbox';
+                        
+                        const scale = 2.0;
+                        const padding = 5;
+                        const minSize = 20;
+                        const [x1, y1, x2, y2] = result.bbox;
+                        const width = (x2 - x1) * img.width;
+                        const height = (y2 - y1) * img.height;
+                        bbox.style.left = `${x1 * img.width - padding}px`;
+                        bbox.style.top = `${y1 * img.height - padding}px`;
+                        bbox.style.width = `${Math.max(width * scale, minSize) + padding * 2}px`;
+                        bbox.style.height = `${Math.max(height * scale, minSize) + padding * 2}px`;
+                        bbox.title = result.text;
+                        
+                        pageContainer.appendChild(bbox);
+                    });
+                };
+                pageContainer.appendChild(img);
+                pagesViewer.appendChild(pageContainer);
+            });
+
+            // Add containers to results
+            pagesContainer.appendChild(thumbnailNav);
+            pagesContainer.appendChild(pagesViewer);
+            container.appendChild(pagesContainer);
+            container.appendChild(numbersPanel);
+
+            // Activate first thumbnail
+            if (data.pages.length > 0) {
+                thumbnailNav.firstChild.classList.add('active');
+            }
+        }
+
         async function processFile() {
-            if (!currentPdfFile) {
-                alert('Please select a PDF file first');
+            if (!currentPdfFile || !currentDocxFile) {
+                alert('Please select both PDF and DOCX files first');
                 return;
             }
 
             const resultsContainer = document.getElementById('results');
             resultsContainer.innerHTML = '<div class="text-line">Processing...</div>';
-            processPdfBtn.disabled = true;
+            processBtn.disabled = true;
             
             try {
-                const formData = new FormData();
-                formData.append('pdf', currentPdfFile);
+                // First process PDF
+                const pdfFormData = new FormData();
+                pdfFormData.append('pdf', currentPdfFile);
 
-                const response = await fetch('/process-pdf', {
+                const pdfResponse = await fetch('/process-pdf', {
                     method: 'POST',
-                    body: formData
+                    body: pdfFormData
                 });
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                if (!pdfResponse.ok) {
+                    throw new Error(`HTTP error! status: ${pdfResponse.status}`);
                 }
 
-                const data = await response.json();
-                
+                const pdfData = await pdfResponse.json();
+
+                // Then process DOCX
+                const docxFormData = new FormData();
+                docxFormData.append('docx', currentDocxFile);
+
+                const docxResponse = await fetch('/process-docx', {
+                    method: 'POST',
+                    body: docxFormData
+                });
+
+                if (!docxResponse.ok) {
+                    throw new Error(`HTTP error! status: ${docxResponse.status}`);
+                }
+
+                const docxData = await docxResponse.json();
+
                 // Clear previous results
-                const resultsContainer = document.getElementById('results');
                 resultsContainer.innerHTML = '';
                 
                 // Create containers for pages and numbers
-                const pagesContainer = document.createElement('div');
-                pagesContainer.className = 'pages-container';
-                const numbersPanel = document.createElement('div');
-                numbersPanel.className = 'numbers-panel';
-                numbersPanel.innerHTML = '<div class="numbers-title">Extracted Numbers</div><div class="numbers-list"></div>';
-
-                // Extract all numbers and track their bounding boxes
-                const numbers = new Set();
-                const numberBoxes = new Map(); // Track bounding boxes for each number
+                const pdfContainer = document.createElement('div');
+                pdfContainer.className = 'file-container';
+                pdfContainer.innerHTML = '<h2>PDF Results</h2>';
                 
-                data.pages.forEach((page, pageIndex) => {
-                    console.log(`Page ${pageIndex + 1} has ${page.ocr_results.length} OCR results`);
-                    page.ocr_results.forEach(result => {
-                        console.log(`OCR result: '${result.text}' at bbox:`, result.bbox);
-                        
-                        // Skip lines that start with FIG.
-                        if (!/^FIG\.?\s*\d+/.test(result.text.trim())) {
-                            // Split the text by spaces and check each part
-                            result.text.split(' ').forEach(part => {
-                                // Match any string that starts with numbers and may include hyphens, letters, or special characters
-                                const trimmed = part.trim();
-                                if (trimmed && /^\d+/.test(trimmed)) {  // If it starts with digits
-                                    numbers.add(trimmed);
-                                    // Store the bounding box for this number
-                                    if (!numberBoxes.has(trimmed)) {
-                                        numberBoxes.set(trimmed, []);
-                                    }
-                                    numberBoxes.get(trimmed).push({
-                                        pageIndex,
-                                        bbox: result.bbox
-                                    });
-                                }
-                            });
-                        }
-                    });
-                });
+                const docxContainer = document.createElement('div');
+                docxContainer.className = 'file-container';
+                docxContainer.innerHTML = '<h2>DOCX Results</h2>';
+
+                // Process and display PDF results
+                displayResults(pdfData, pdfContainer);
                 
-                console.log('Found numbers:', Array.from(numbers));
-                console.log('Number boxes:', numberBoxes);
-
-                // Display numbers in order of appearance
-                const numbersList = numbersPanel.querySelector('.numbers-list');
-                Array.from(numbers).forEach(num => {
-                    const numDiv = document.createElement('div');
-                    numDiv.className = 'text-line';
-                    numDiv.textContent = num;
-                    numbersList.appendChild(numDiv);
-                });
-
-                // Create thumbnail navigation
-                const thumbnailNav = document.createElement('div');
-                thumbnailNav.className = 'thumbnail-nav';
-                const pagesViewer = document.createElement('div');
-                pagesViewer.className = 'pages-viewer';
-
-                // Create thumbnails
-                data.pages.forEach((page, pageIndex) => {
-                    const thumbnail = document.createElement('img');
-                    thumbnail.src = page.image;
-                    thumbnail.className = 'thumbnail';
-                    thumbnail.onclick = () => {
-                        // Update active state
-                        thumbnailNav.querySelectorAll('.thumbnail').forEach((t, i) => {
-                            t.classList.toggle('active', i === pageIndex);
-                        });
-                        // Scroll to the selected page
-                        const targetPage = pagesViewer.children[pageIndex];
-                        targetPage.scrollIntoView({ behavior: 'smooth' });
-                    };
-                    thumbnailNav.appendChild(thumbnail);
-                });
-
-                // Display pages with bounding boxes
-                data.pages.forEach((page, pageIndex) => {
-                    const pageContainer = document.createElement('div');
-                    pageContainer.className = 'page-container';
-                    
-                    // Add page image
-                    const img = document.createElement('img');
-                    img.src = page.image;
-                    img.onload = () => {
-                        // Add bounding boxes after image loads so we can use actual image dimensions
-                        page.ocr_results.forEach(result => {
-                            const bbox = document.createElement('div');
-                            bbox.className = 'bbox';
-                            
-                            // Set position and size based on actual image dimensions with padding
-                            const scale = 2.0; // Scale up boxes to make them more visible
-                            const padding = 5; // Add padding around the box
-                            const minSize = 20; // minimum size in pixels
-                            const [x1, y1, x2, y2] = result.bbox;
-                            const width = (x2 - x1) * img.width;
-                            const height = (y2 - y1) * img.height;
-                            bbox.style.left = `${x1 * img.width - padding}px`;
-                            bbox.style.top = `${y1 * img.height - padding}px`;
-                            bbox.style.width = `${Math.max(width * scale, minSize) + padding * 2}px`;
-                            bbox.style.height = `${Math.max(height * scale, minSize) + padding * 2}px`;
-                            bbox.title = result.text; // Add tooltip to show the text
-                            
-                            pageContainer.appendChild(bbox);
-                        });
-                    };
-                    pageContainer.appendChild(img);
-
-                    pagesViewer.appendChild(pageContainer);
-                });
+                // Process and display DOCX results
+                displayResults(docxData, docxContainer);
 
                 // Add containers to results
-                pagesContainer.appendChild(thumbnailNav);
-                pagesContainer.appendChild(pagesViewer);
-                resultsContainer.appendChild(pagesContainer);
-                resultsContainer.appendChild(numbersPanel);
+                resultsContainer.appendChild(pdfContainer);
+                resultsContainer.appendChild(docxContainer);
 
-                // Activate first thumbnail
-                if (data.pages.length > 0) {
-                    thumbnailNav.firstChild.classList.add('active');
-                }
             } catch (error) {
-                const resultsContainer = document.getElementById('results');
                 resultsContainer.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
             } finally {
                 processBtn.disabled = false;
