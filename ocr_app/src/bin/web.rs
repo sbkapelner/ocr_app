@@ -89,16 +89,18 @@ async fn process_docx(
         .map_err(|e| format!("Failed to read file data: {}", e))?;
 
     // Create a temporary file
-    let mut temp_file = NamedTempFile::new()
+    let temp_file = NamedTempFile::new()
         .map_err(|e| format!("Failed to create temporary file: {}", e))?;
 
     // Write the data to the temporary file
-    std::io::Write::write_all(&mut temp_file, &data)
+    std::io::Write::write_all(&mut temp_file.as_file(), &data)
         .map_err(|e| format!("Failed to write to temporary file: {}", e))?;
 
+    let file_path = temp_file.path();
+
     // Process the DOCX
-    println!("[DEBUG] Processing DOCX file: {}", temp_file.path().display());
-    let results = match ocr_app::process_docx(&state.engine, temp_file.path()) {
+    println!("[DEBUG] Processing DOCX file: {}", file_path.display());
+    let results = match ocr_app::process_docx(&state.engine, file_path) {
         Ok(r) => r,
         Err(e) => {
             println!("[DEBUG] DOCX processing error: {}", e);
@@ -151,16 +153,18 @@ async fn process_pdf(
         .map_err(|e| format!("Failed to read file data: {}", e))?;
 
     // Create a temporary file
-    let mut temp_file = NamedTempFile::new()
+    let temp_file = NamedTempFile::new()
         .map_err(|e| format!("Failed to create temporary file: {}", e))?;
 
     // Write the data to the temporary file
-    std::io::Write::write_all(&mut temp_file, &data)
+    std::io::Write::write_all(&mut temp_file.as_file(), &data)
         .map_err(|e| format!("Failed to write to temporary file: {}", e))?;
 
+    let file_path = temp_file.path();
+
     // Process the PDF
-    println!("[DEBUG] Processing PDF file: {}", temp_file.path().display());
-    let results = match ocr_app::process_pdf(&state.engine, temp_file.path()) {
+    println!("[DEBUG] Processing PDF file: {}", file_path.display());
+    let results = match ocr_app::process_pdf(&state.engine, file_path) {
         Ok(r) => r,
         Err(e) => {
             println!("[DEBUG] PDF processing error: {}", e);

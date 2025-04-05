@@ -468,6 +468,9 @@
             if (file && file.type === 'application/pdf') {
                 currentPdfFile = file;
                 pdfNameDisplay.textContent = file.name;
+                // Clear both file inputs to ensure we get fresh files next time
+                pdfInput.value = '';
+                docxInput.value = '';
                 updateProcessButton();
             } else {
                 alert('Please select a PDF file');
@@ -481,6 +484,9 @@
             if (file && file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
                 currentDocxFile = file;
                 docxNameDisplay.textContent = file.name;
+                // Clear both file inputs to ensure we get fresh files next time
+                pdfInput.value = '';
+                docxInput.value = '';
                 updateProcessButton();
             } else {
                 alert('Please select a DOCX file');
