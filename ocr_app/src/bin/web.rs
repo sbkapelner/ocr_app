@@ -25,6 +25,7 @@ struct ProcessResponse {
 #[derive(serde::Serialize)]
 struct DocxProcessResponse {
     numbers: Vec<String>,
+    html_content: String,
 }
 
 #[derive(serde::Serialize)]
@@ -105,9 +106,21 @@ async fn process_docx(
         }
     };
 
+    // Extract paragraphs and format as HTML
+    println!("[DEBUG] Converting DOCX content to HTML");
+    let mut html_content = String::from("<div class='docx-content'>");
+
+    for paragraph in &results.paragraphs {
+        html_content.push_str("<p>");
+        html_content.push_str(&html_escape::encode_text(&paragraph));
+        html_content.push_str("</p>");
+    }
+    html_content.push_str("</div>");
+
     // Return the results
     Ok(Json(DocxProcessResponse { 
-        numbers: results.numbers
+        numbers: results.numbers,
+        html_content
     }))
 }
 

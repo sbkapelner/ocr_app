@@ -75,6 +75,7 @@ pub struct OcrResult {
 #[derive(serde::Serialize)]
 pub struct DocxResult {
     pub numbers: Vec<String>,  // Extracted numbers in order of appearance
+    pub paragraphs: Vec<String>,  // Text content split into paragraphs
 }
 
 
@@ -147,8 +148,11 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<
     let docx = docx_rs::read_docx(&docx_content)
         .context("Failed to parse DOCX file")?;
 
-    // Extract all text from the document
+    // Extract text and paragraphs from the document
     let mut text = String::new();
+    let mut paragraphs = Vec::new();
+    let mut current_paragraph = String::new();
+
     for child in docx.document.children {
         if let docx_rs::DocumentChild::Paragraph(para) = child {
             for child in para.children {
@@ -157,9 +161,15 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<
                         if let docx_rs::RunChild::Text(text_content) = child {
                             text.push_str(&text_content.text);
                             text.push(' ');
+                            current_paragraph.push_str(&text_content.text);
+                            current_paragraph.push(' ');
                         }
                     }
                 }
+            }
+            if !current_paragraph.trim().is_empty() {
+                paragraphs.push(current_paragraph.trim().to_string());
+                current_paragraph.clear();
             }
             text.push('\n');
         }
@@ -189,7 +199,8 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<
     });
 
     Ok(DocxResult {
-        numbers: numbers_vec
+        numbers: numbers_vec,
+        paragraphs
     })
 }
 
