@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::io::Cursor;
+use axum::extract::DefaultBodyLimit;
 
 use anyhow::{Context, Result};
 use axum::{
@@ -44,16 +45,27 @@ struct AppState {
 }
 
 async fn index() -> Html<String> {
-    let index_html = tokio::fs::read_to_string("templates/index.html")
-        .await
-        .expect("Failed to read index.html");
-    Html(index_html)
+    println!("[DEBUG] Index route called");
+    let index_path = "templates/index.html";
+    println!("[DEBUG] Looking for index.html at: {}", file_path(index_path).display());
+    
+    match tokio::fs::read_to_string(index_path).await {
+        Ok(content) => {
+            println!("[DEBUG] Successfully read index.html ({} bytes)", content.len());
+            Html(content)
+        }
+        Err(e) => {
+            println!("[DEBUG] Error reading index.html: {}", e);
+            Html(format!("Error reading index.html: {}", e))
+        }
+    }
 }
 
 async fn process_docx(
     State(state): State<Arc<AppState>>,
     mut multipart: Multipart,
 ) -> Result<Json<DocxProcessResponse>, String> {
+    println!("[DEBUG] Starting DOCX processing");
     // Get the DOCX file from the form data
     let field = multipart
         .next_field()
@@ -84,8 +96,14 @@ async fn process_docx(
         .map_err(|e| format!("Failed to write to temporary file: {}", e))?;
 
     // Process the DOCX
-    let results = ocr_app::process_docx(&state.engine, temp_file.path())
-        .map_err(|e| format!("Failed to process DOCX: {}", e))?;
+    println!("[DEBUG] Processing DOCX file: {}", temp_file.path().display());
+    let results = match ocr_app::process_docx(&state.engine, temp_file.path()) {
+        Ok(r) => r,
+        Err(e) => {
+            println!("[DEBUG] DOCX processing error: {}", e);
+            return Err(format!("Failed to process DOCX: {}", e));
+        }
+    };
 
     // Return the results
     Ok(Json(DocxProcessResponse { 
@@ -97,6 +115,7 @@ async fn process_pdf(
     State(state): State<Arc<AppState>>,
     mut multipart: Multipart,
 ) -> Result<Json<ProcessResponse>, String> {
+    println!("[DEBUG] Starting PDF processing");
     // Get the PDF file from the form data
     let field = multipart
         .next_field()
@@ -127,8 +146,14 @@ async fn process_pdf(
         .map_err(|e| format!("Failed to write to temporary file: {}", e))?;
 
     // Process the PDF
-    let results = ocr_app::process_pdf(&state.engine, temp_file.path())
-        .map_err(|e| format!("Failed to process PDF: {}", e))?;
+    println!("[DEBUG] Processing PDF file: {}", temp_file.path().display());
+    let results = match ocr_app::process_pdf(&state.engine, temp_file.path()) {
+        Ok(r) => r,
+        Err(e) => {
+            println!("[DEBUG] PDF processing error: {}", e);
+            return Err(format!("Failed to process PDF: {}", e));
+        }
+    };
 
     // Convert results to response format
     let pages = results.into_iter().map(|(img, ocr_results)| {
@@ -177,12 +202,19 @@ async fn main() -> Result<()> {
         .route("/process-pdf", post(process_pdf))
         .route("/process-docx", post(process_docx))
         .nest_service("/static", ServeDir::new("static"))
+        .layer(DefaultBodyLimit::max(50 * 1024 * 1024))  // 50MB limit
         .with_state(state);
 
     // Start server
-    println!("Server running on http://localhost:3001");
-    let addr: std::net::SocketAddr = "0.0.0.0:3001".parse().unwrap();
+    println!("Server running on http://192.168.1.106:3001");
+    let addr = std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)), 3001);
+    println!("[DEBUG] Templates directory: {}", file_path("templates").display());
+    println!("[DEBUG] Current working directory: {}", std::env::current_dir()?.display());
+    
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    println!("[DEBUG] Server bound to {}", addr);
+    println!("[DEBUG] Starting server...");
+
     axum::serve(listener, app).await
         .context("Server error")?;
 

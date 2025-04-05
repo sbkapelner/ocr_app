@@ -68,10 +68,14 @@
         .text-line {
             padding: 5px 10px;
             border-radius: 4px;
-            cursor: help;
             transition: all 0.2s;
             display: flex;
             align-items: center;
+            cursor: pointer;
+        }
+
+        .text-line:hover {
+            filter: brightness(0.9);
         }
 
         .numbers-section {
@@ -469,36 +473,82 @@
             const pdfOnlyList = numbersPanel.querySelector('.pdf-only-list');
             const docxOnlyList = numbersPanel.querySelector('.docx-only-list');
 
+            function createNumberDiv(num, className, title, clickHandler) {
+                const numDiv = document.createElement('div');
+                numDiv.className = `text-line ${className}`;
+                numDiv.title = title;
+                numDiv.textContent = num;
+                // Store the source (pdf or docx) in the element's data attribute
+                numDiv.dataset.source = className === 'pdf-only' ? 'pdf' : 
+                                      className === 'docx-only' ? 'docx' : 
+                                      className === 'match' ? (numbers.has(num) ? 'pdf' : 'docx') : '';
+                numDiv.addEventListener('click', () => clickHandler(num, numDiv));
+                return numDiv;
+            }
+
+            function moveToMatching(num, element) {
+                if (element.classList.contains('pdf-only')) {
+                    docxNumbers.add(num);
+                    element.remove();
+                    matchingList.appendChild(
+                        createNumberDiv(num, 'match', 'Found in both PDF and DOCX', moveFromMatching)
+                    );
+                } else if (element.classList.contains('docx-only')) {
+                    numbers.add(num);
+                    element.remove();
+                    matchingList.appendChild(
+                        createNumberDiv(num, 'match', 'Found in both PDF and DOCX', moveFromMatching)
+                    );
+                }
+            }
+
+            function moveFromMatching(num, element) {
+                if (numbers.has(num) && docxNumbers.has(num)) {
+                    // Store the original source in the element's data attribute
+                    const source = element.dataset.source || (numbers.has(num) ? 'pdf' : 'docx');
+                    
+                    if (source === 'pdf') {
+                        // If it was originally from PDF, move to PDF-only
+                        docxNumbers.delete(num);
+                        element.remove();
+                        pdfOnlyList.appendChild(
+                            createNumberDiv(num, 'pdf-only', 'Found only in PDF', moveToMatching)
+                        );
+                    } else {
+                        // If it was originally from DOCX, move to DOCX-only
+                        numbers.delete(num);
+                        element.remove();
+                        docxOnlyList.appendChild(
+                            createNumberDiv(num, 'docx-only', 'Found only in DOCX', moveToMatching)
+                        );
+                    }
+                }
+            }
+
             // Numbers found in both files
             Array.from(numbers).forEach(num => {
                 if (docxNumbers.has(num)) {
-                    const numDiv = document.createElement('div');
-                    numDiv.className = 'text-line match';
-                    numDiv.title = 'Found in both PDF and DOCX';
-                    numDiv.textContent = num;
-                    matchingList.appendChild(numDiv);
+                    matchingList.appendChild(
+                        createNumberDiv(num, 'match', 'Found in both PDF and DOCX', moveFromMatching)
+                    );
                 }
             });
 
             // Numbers only in PDF
             Array.from(numbers).forEach(num => {
                 if (!docxNumbers.has(num)) {
-                    const numDiv = document.createElement('div');
-                    numDiv.className = 'text-line pdf-only';
-                    numDiv.title = 'Found only in PDF';
-                    numDiv.textContent = num;
-                    pdfOnlyList.appendChild(numDiv);
+                    pdfOnlyList.appendChild(
+                        createNumberDiv(num, 'pdf-only', 'Found only in PDF', moveToMatching)
+                    );
                 }
             });
 
             // Numbers only in DOCX
             Array.from(docxNumbers).forEach(num => {
                 if (!numbers.has(num)) {
-                    const numDiv = document.createElement('div');
-                    numDiv.className = 'text-line docx-only';
-                    numDiv.title = 'Found only in DOCX';
-                    numDiv.textContent = num;
-                    docxOnlyList.appendChild(numDiv);
+                    docxOnlyList.appendChild(
+                        createNumberDiv(num, 'docx-only', 'Found only in DOCX', moveToMatching)
+                    );
                 }
             });
 
