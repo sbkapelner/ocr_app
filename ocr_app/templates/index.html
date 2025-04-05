@@ -384,6 +384,8 @@
     <script>
         let currentPdfFile = null;
         let currentDocxFile = null;
+        let lastPdfHash = null;
+        let lastDocxHash = null;
         const pdfDropZone = document.getElementById('pdf-drop-zone');
         const docxDropZone = document.getElementById('docx-drop-zone');
         const pdfInput = document.getElementById('pdf-input');
@@ -397,6 +399,10 @@
             currentPdfFile = null;
             currentDocxFile = null;
             docxNumbers.clear();
+            
+            // Clear hashes
+            lastPdfHash = null;
+            lastDocxHash = null;
             
             // Clear results
             document.getElementById('results').innerHTML = '';
@@ -703,11 +709,15 @@
 
         let docxNumbers = new Set(); // Store DOCX numbers globally
 
+        // Server will calculate SHA-256 hashes
+
         async function processFile() {
             if (!currentPdfFile || !currentDocxFile) {
                 alert('Please select both PDF and DOCX files first');
                 return;
             }
+
+
 
             const resultsContainer = document.getElementById('results');
             resultsContainer.innerHTML = '<div class="text-line">Processing...</div>';
@@ -730,6 +740,11 @@
                 const docxData = await docxResponse.json();
                 docxNumbers = new Set(docxData.numbers); // Store for comparison
                 console.log('DOCX Numbers:', docxData.numbers);
+                
+                // Store DOCX hash from server
+                const docxHash = docxData.file_hash;
+                const docxChanged = docxHash !== lastDocxHash;
+                lastDocxHash = docxHash;
 
                 // Then process PDF
                 const pdfFormData = new FormData();
@@ -745,6 +760,16 @@
                 }
 
                 const pdfData = await pdfResponse.json();
+                
+                // Store PDF hash from server
+                const pdfHash = pdfData.file_hash;
+                const pdfChanged = pdfHash !== lastPdfHash;
+                lastPdfHash = pdfHash;
+
+                if (!pdfChanged && !docxChanged) {
+                    console.log('No changes detected in either file');
+                    return;
+                }
 
                 // Clear previous results
                 resultsContainer.innerHTML = '';

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::io::Cursor;
 use axum::extract::DefaultBodyLimit;
+use sha2::{Sha256, Digest};
 
 use anyhow::{Context, Result};
 use axum::{
@@ -20,12 +21,14 @@ use ocr_app::OcrResult;
 #[derive(serde::Serialize)]
 struct ProcessResponse {
     pages: Vec<PageResult>,
+    file_hash: String,
 }
 
 #[derive(serde::Serialize)]
 struct DocxProcessResponse {
     numbers: Vec<String>,
     html_content: String,
+    file_hash: String,
 }
 
 #[derive(serde::Serialize)]
@@ -88,6 +91,11 @@ async fn process_docx(
         .await
         .map_err(|e| format!("Failed to read file data: {}", e))?;
 
+    // Calculate SHA-256 hash
+    let mut hasher = Sha256::new();
+    hasher.update(&data);
+    let hash = format!("{:x}", hasher.finalize());
+
     // Create a temporary file
     let temp_file = NamedTempFile::new()
         .map_err(|e| format!("Failed to create temporary file: {}", e))?;
@@ -122,7 +130,8 @@ async fn process_docx(
     // Return the results
     Ok(Json(DocxProcessResponse { 
         numbers: results.numbers,
-        html_content
+        html_content,
+        file_hash: hash
     }))
 }
 
@@ -151,6 +160,11 @@ async fn process_pdf(
         .bytes()
         .await
         .map_err(|e| format!("Failed to read file data: {}", e))?;
+
+    // Calculate SHA-256 hash
+    let mut hasher = Sha256::new();
+    hasher.update(&data);
+    let hash = format!("{:x}", hasher.finalize());
 
     // Create a temporary file
     let temp_file = NamedTempFile::new()
@@ -187,7 +201,10 @@ async fn process_pdf(
     }).collect::<Result<Vec<_>, String>>()?;
 
     // Return the results
-    Ok(Json(ProcessResponse { pages }))
+    Ok(Json(ProcessResponse { 
+        pages,
+        file_hash: hash
+    }))
 }
 
 #[tokio::main]
