@@ -125,6 +125,18 @@
             border-color: #c3e6c3;
         }
 
+        .text-line.pdf-only {
+            background: #ffe8e8;
+            color: #c62828;
+            border-color: #ffcdd2;
+        }
+
+        .text-line.docx-only {
+            background: #e3f2fd;
+            color: #1565c0;
+            border-color: #bbdefb;
+        }
+
         .text-line.match {
             background: #d4edda;
             color: #155724;
@@ -788,6 +800,7 @@
                         div.classList.add('match');
                         commonSection.appendChild(div);
                     } else {
+                        div.classList.add('pdf-only');
                         pdfOnlySection.appendChild(div);
                     }
                 });
@@ -796,6 +809,7 @@
                     if (!pdfNumbers.has(num)) {
                         const div = document.createElement('div');
                         div.className = 'text-line';
+                        div.classList.add('docx-only');
                         div.textContent = num;
                         docxOnlySection.appendChild(div);
                     }
