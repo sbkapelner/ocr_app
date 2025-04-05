@@ -33,8 +33,26 @@
             background-color: #cccccc;
             cursor: not-allowed;
         }
+
+        .button-container {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        #resetBtn {
+            background-color: #dc3545;
+        }
+
+        #resetBtn:hover:not(:disabled) {
+            background-color: #c82333;
+        }
         button:hover:not(:disabled) {
             background-color: #45a049;
+        }
+
+        #reset-btn:hover {
+            background-color: #c82333 !important;
         }
         #result {
             margin-top: 20px;
@@ -275,6 +293,7 @@
 
     <div style="display: flex; gap: 10px;">
         <button id="process-btn" onclick="processFile()" disabled>Process Files</button>
+        <button id="reset-btn" onclick="resetPage()" style="background-color: #dc3545;">Reset</button>
     </div>
     <div id="result" style="display: none;"></div>
     <div id="results" class="results-container"></div>
@@ -285,6 +304,32 @@
         const pdfDropZone = document.getElementById('pdf-drop-zone');
         const docxDropZone = document.getElementById('docx-drop-zone');
         const pdfInput = document.getElementById('pdf-input');
+
+        function resetPage() {
+            // Clear file inputs
+            document.getElementById('pdf-input').value = '';
+            document.getElementById('docx-input').value = '';
+            
+            // Clear file variables
+            currentPdfFile = null;
+            currentDocxFile = null;
+            docxNumbers.clear();
+            
+            // Clear results
+            document.getElementById('results').innerHTML = '';
+            
+            // Reset button states
+            document.getElementById('process-btn').disabled = true;
+            
+            // Reset file names
+            document.getElementById('pdf-name').textContent = '';
+            document.getElementById('docx-name').textContent = '';
+            
+            // Reset drag areas
+            [pdfDropZone, docxDropZone].forEach(area => {
+                area.classList.remove('drag-over');
+            });
+        }
         const docxInput = document.getElementById('docx-input');
         const pdfNameDisplay = document.getElementById('pdf-name');
         const docxNameDisplay = document.getElementById('docx-name');
