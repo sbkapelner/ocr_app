@@ -117,6 +117,14 @@
             font-size: 13px;
             background: #fff;
             border: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .text-line input[type='checkbox'] {
+            margin: 0;
+            cursor: pointer;
         }
 
         .text-line.match {
@@ -135,30 +143,6 @@
             background: #e3f2fd;
             color: #1565c0;
             border-color: #bbdefb;
-        }
-
-        .text-line.match {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .text-line.pdf-only {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        .text-line.docx-only {
-            background: #cce5ff;
-            color: #004085;
-            border: 1px solid #b8daff;
-        }
-        .text-line:hover {
-            background-color: #f0f0f0;
-        }
-        .text-line.highlighted {
-            background-color: #fff59d;
         }
         .error {
             color: #dc3545;
@@ -794,15 +778,25 @@
                 pdfNumbers.forEach(num => {
                     const div = document.createElement('div');
                     div.className = 'text-line';
-                    div.textContent = num;
+                    
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    
+                    const text = document.createElement('span');
+                    text.textContent = num;
                     
                     if (docxNumbers.has(num)) {
                         div.classList.add('match');
+                        checkbox.checked = true;
                         commonSection.appendChild(div);
                     } else {
                         div.classList.add('pdf-only');
+                        checkbox.checked = false;
                         pdfOnlySection.appendChild(div);
                     }
+                    
+                    div.appendChild(checkbox);
+                    div.appendChild(text);
                 });
 
                 docxNumbers.forEach(num => {
@@ -810,7 +804,16 @@
                         const div = document.createElement('div');
                         div.className = 'text-line';
                         div.classList.add('docx-only');
-                        div.textContent = num;
+                        
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.checked = false;
+                        
+                        const text = document.createElement('span');
+                        text.textContent = num;
+                        
+                        div.appendChild(checkbox);
+                        div.appendChild(text);
                         docxOnlySection.appendChild(div);
                     }
                 });
