@@ -564,63 +564,19 @@
             const pdfOnlyList = numbersPanel.querySelector('.pdf-only-list');
             const docxOnlyList = numbersPanel.querySelector('.docx-only-list');
 
-            function createNumberDiv(num, className, title, clickHandler) {
+            function createNumberDiv(num, className, title) {
                 const numDiv = document.createElement('div');
                 numDiv.className = `text-line ${className}`;
                 numDiv.title = title;
                 numDiv.textContent = num;
-                // Store the source (pdf or docx) in the element's data attribute
-                numDiv.dataset.source = className === 'pdf-only' ? 'pdf' : 
-                                      className === 'docx-only' ? 'docx' : 
-                                      className === 'match' ? (numbers.has(num) ? 'pdf' : 'docx') : '';
-                numDiv.addEventListener('click', () => clickHandler(num, numDiv));
                 return numDiv;
-            }
-
-            function moveToMatching(num, element) {
-                if (element.classList.contains('pdf-only')) {
-                    docxNumbers.add(num);
-                    element.remove();
-                    matchingList.appendChild(
-                        createNumberDiv(num, 'match', 'Found in both PDF and DOCX', moveFromMatching)
-                    );
-                } else if (element.classList.contains('docx-only')) {
-                    numbers.add(num);
-                    element.remove();
-                    matchingList.appendChild(
-                        createNumberDiv(num, 'match', 'Found in both PDF and DOCX', moveFromMatching)
-                    );
-                }
-            }
-
-            function moveFromMatching(num, element) {
-                if (numbers.has(num) && docxNumbers.has(num)) {
-                    // Store the original source in the element's data attribute
-                    const source = element.dataset.source || (numbers.has(num) ? 'pdf' : 'docx');
-                    
-                    if (source === 'pdf') {
-                        // If it was originally from PDF, move to PDF-only
-                        docxNumbers.delete(num);
-                        element.remove();
-                        pdfOnlyList.appendChild(
-                            createNumberDiv(num, 'pdf-only', 'Found only in PDF', moveToMatching)
-                        );
-                    } else {
-                        // If it was originally from DOCX, move to DOCX-only
-                        numbers.delete(num);
-                        element.remove();
-                        docxOnlyList.appendChild(
-                            createNumberDiv(num, 'docx-only', 'Found only in DOCX', moveToMatching)
-                        );
-                    }
-                }
             }
 
             // Numbers found in both files
             Array.from(numbers).forEach(num => {
                 if (docxNumbers.has(num)) {
                     matchingList.appendChild(
-                        createNumberDiv(num, 'match', 'Found in both PDF and DOCX', moveFromMatching)
+                        createNumberDiv(num, 'match', 'Found in both PDF and DOCX')
                     );
                 }
             });
@@ -629,7 +585,7 @@
             Array.from(numbers).forEach(num => {
                 if (!docxNumbers.has(num)) {
                     pdfOnlyList.appendChild(
-                        createNumberDiv(num, 'pdf-only', 'Found only in PDF', moveToMatching)
+                        createNumberDiv(num, 'pdf-only', 'Found only in PDF')
                     );
                 }
             });
@@ -638,7 +594,7 @@
             Array.from(docxNumbers).forEach(num => {
                 if (!numbers.has(num)) {
                     docxOnlyList.appendChild(
-                        createNumberDiv(num, 'docx-only', 'Found only in DOCX', moveToMatching)
+                        createNumberDiv(num, 'docx-only', 'Found only in DOCX')
                     );
                 }
             });
