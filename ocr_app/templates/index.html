@@ -12,12 +12,7 @@
 <body>
     <h1>OCR App</h1>
     <div class="toolbar">
-        <button class="toolbar-btn" id="toggle-thumbnails" title="Toggle Thumbnails">
-            <svg viewBox="0 0 24 24" width="24" height="24">
-                <path fill="currentColor" d="M4 14v-4h2v4H4zm4 1h12v-6H8v6zm0-8h12V1H8v6zM4 8V4h2v4H4zm4 11h12v-6H8v6zM4 20v-4h2v4H4z"/>
-            </svg>
-        </button>
-        <button class="toolbar-btn" id="toggle-pdf" title="Toggle PDF Viewer">
+        <button class="toolbar-btn" id="toggle-pdf-view" title="Toggle PDF View">
             <svg viewBox="0 0 24 24" width="24" height="24">
                 <path fill="currentColor" d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm12 6V9c0-.55-.45-1-1-1h-2v5h2c.55 0 1-.45 1-1zm-2-3h1v3h-1V9z"/>
             </svg>
@@ -61,14 +56,10 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // Toggle visibility handlers
-            document.getElementById('toggle-thumbnails').addEventListener('click', function() {
+            document.getElementById('toggle-pdf-view').addEventListener('click', function() {
                 const nav = document.querySelector('.thumbnail-nav');
-                nav.classList.toggle('hidden');
-                this.classList.toggle('active');
-            });
-
-            document.getElementById('toggle-pdf').addEventListener('click', function() {
                 const viewer = document.querySelector('.pages-viewer');
+                nav.classList.toggle('hidden');
                 viewer.classList.toggle('hidden');
                 this.classList.toggle('active');
             });

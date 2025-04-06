@@ -244,8 +244,7 @@ button:active:not(:disabled) {
     color: #333;
 }
 .results-container {
-    display: grid;
-    grid-template-columns: 10% 35% 35% 20%;
+    display: flex;
     gap: 20px;
     margin-top: 20px;
     padding: 0;
@@ -253,6 +252,51 @@ button:active:not(:disabled) {
     align-items: start;
     overflow: visible;
     min-height: calc(100vh - 200px);
+}
+
+/* Default widths */
+.thumbnail-nav {
+    width: 120px;
+    flex: 0 0 120px;
+}
+
+.pages-viewer {
+    flex: 1;
+    min-width: 0;
+}
+
+.docx-viewer {
+    flex: 1;
+    min-width: 0;
+}
+
+.numbers-section {
+    width: 200px;
+    flex: 0 0 200px;
+}
+
+/* When PDF view is hidden */
+.thumbnail-nav.hidden ~ .docx-viewer {
+    flex: 2;
+}
+
+/* When DOCX viewer is hidden */
+.pages-viewer:not(.hidden) {
+    flex: 2;
+}
+
+/* When numbers are hidden */
+.numbers-section.hidden ~ .docx-viewer:not(.hidden),
+.pages-viewer:not(.hidden) {
+    flex: 1;
+}
+
+/* Transitions */
+.thumbnail-nav,
+.pages-viewer,
+.docx-viewer,
+.numbers-section {
+    transition: width 0.3s ease;
 }
 .pages-container {
     grid-column: 2;
