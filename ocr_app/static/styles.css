@@ -25,12 +25,15 @@ body > h1 {
 
 body > .toolbar {
     position: absolute;
-    left: 20px;
-    top: 100px;
+    left: 0;
+    top: 80px;
+    display: flex;
+    flex-direction: column;
+    padding-left: 20px;
 }
 
 body > .sub-background {
-    margin-left: 80px !important;
+    margin-left: 55px !important;
 }
 
 .sub-background {
@@ -54,7 +57,7 @@ body > .sub-background {
     background: #2a2a2a;
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    height: fit-content;
+    height: 885px;
 }
 
 .toolbar-btn {
