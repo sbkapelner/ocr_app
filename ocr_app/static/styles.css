@@ -15,6 +15,22 @@ body {
     padding: 20px;
     box-sizing: border-box;
     min-height: 100%;
+    position: relative;
+}
+
+/* Container for toolbar and sub-background */
+body > h1 {
+    margin-bottom: 20px;
+}
+
+body > .toolbar {
+    position: fixed;
+    left: 20px;
+    top: 100px;
+}
+
+body > .sub-background {
+    margin-left: 80px !important;
 }
 
 .sub-background {
