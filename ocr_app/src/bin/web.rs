@@ -50,8 +50,19 @@ struct AppState {
 
 async fn index() -> Html<String> {
     println!("[DEBUG] Index route called");
-    let index_path = "templates/index.html";
-    println!("[DEBUG] Looking for index.html at: {}", file_path(index_path).display());
+    let index_path = "/app/templates/index.html";
+    println!("[DEBUG] Looking for index.html at: {}", index_path);
+    println!("[DEBUG] Current working directory: {}", std::env::current_dir().unwrap().display());
+    println!("[DEBUG] Directory contents:");
+    if let Ok(entries) = std::fs::read_dir("/app/templates") {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                println!("[DEBUG] - {}", entry.path().display());
+            }
+        }
+    } else {
+        println!("[DEBUG] Could not read /app/templates directory");
+    }
     
     match tokio::fs::read_to_string(index_path).await {
         Ok(content) => {
@@ -210,8 +221,8 @@ async fn process_pdf(
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize OCR engine with models
-    let detection_model_path = file_path("models/text-detection-checkpoint-03.23.recall_92.precis_85.rten");
-    let rec_model_path = file_path("models/text-rec-checkpoint-7.rten");
+    let detection_model_path = PathBuf::from("/app/models/text-detection-checkpoint-03.23.recall_92.precis_85.rten");
+    let rec_model_path = PathBuf::from("/app/models/text-rec-checkpoint-7.rten");
 
     // Load models
     let detection_model = ocr_app::models::load_model(detection_model_path.to_str().unwrap())
@@ -231,17 +242,20 @@ async fn main() -> Result<()> {
     let state = Arc::new(AppState { engine });
 
     // Create router
+    println!("[DEBUG] Setting up router");
     let app = Router::new()
         .route("/", get(index))
         .route("/process-pdf", post(process_pdf))
         .route("/process-docx", post(process_docx))
-        .nest_service("/static", ServeDir::new("static"))
+        .nest_service("/static", ServeDir::new("/app/static"))
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024))  // 50MB limit
         .with_state(state);
+    println!("[DEBUG] Router configured with routes: /, /process-pdf, /process-docx, /static");
 
     // Start server
-    println!("Server running on http://192.168.1.106:3001");
-    let addr = std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)), 3001);
+    let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string()).parse::<u16>().unwrap();
+    println!("Server running on port {}", port);
+    let addr = std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)), port);
     println!("[DEBUG] Templates directory: {}", file_path("templates").display());
     println!("[DEBUG] Current working directory: {}", std::env::current_dir()?.display());
     
