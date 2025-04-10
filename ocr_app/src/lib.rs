@@ -142,6 +142,24 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
     Ok(ocr_results)
 }
 
+// Helper function to normalize a number
+fn normalize_number(num: &str) -> String {
+    let mut result = String::new();
+    let chars: Vec<char> = num.chars().collect();
+    let len = chars.len();
+    
+    for (i, c) in chars.iter().enumerate() {
+        if c.is_ascii_digit() {
+            result.push(*c);
+        } else if *c == '-' && i > 0 && i < len - 1 && 
+                  chars[i-1].is_ascii_digit() && chars[i+1].is_ascii_digit() {
+            // Only keep hyphen if it's between two digits
+            result.push(*c);
+        }
+    }
+    result
+}
+
 pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<DocxResult> {
     // Read DOCX file
     let docx_content = std::fs::read(docx_path)
@@ -176,25 +194,56 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<
         }
     }
 
-    // Create regex pattern for words followed by numbers
-    let pattern = Regex::new(r"\b\w+\s+([0-9]+(?:-[0-9]+)?[a-zA-Z]?)\b")
+    // Helper function to normalize a number
+    fn normalize_number(num: &str) -> String {
+        let mut result = String::new();
+        let chars: Vec<char> = num.chars().collect();
+        let len = chars.len();
+        
+        for (i, c) in chars.iter().enumerate() {
+            if c.is_ascii_digit() {
+                result.push(*c);
+            } else if *c == '-' && i > 0 && i < len - 1 && 
+                      chars[i-1].is_ascii_digit() && chars[i+1].is_ascii_digit() {
+                // Only keep hyphen if it's between two digits
+                result.push(*c);
+            }
+        }
+        result
+    }
+
+    // Create regex pattern for words followed by any non-whitespace that contains a number
+    let pattern = Regex::new(r"\b(\w+)\s+([^\s]*[0-9][^\s]*)\b")
         .context("Failed to create regex pattern")?;
 
     // Extract full matches and their numbers
-    let mut full_matches_set = HashSet::new();
+    let mut normalized_matches = HashSet::new();
     let mut numbers = HashSet::new();
     let mut full_matches = Vec::new();
 
     for cap in pattern.captures_iter(&text) {
-        // Get the full match (e.g., "word 123")
-        let full_match = cap.get(0).unwrap().as_str().to_string();
-        // Get just the number part (e.g., "123")
-        let number = cap.get(1).unwrap().as_str().to_string();
+        let word = cap.get(1).unwrap().as_str().trim().to_lowercase();
+        let raw_number = cap.get(2).unwrap().as_str().trim();
         
-        // Only add if we haven't seen this match before
-        if full_matches_set.insert(full_match.clone()) {
+        // Skip if the raw number doesn't contain any digits
+        if !raw_number.chars().any(|c| c.is_ascii_digit()) {
+            continue;
+        }
+        
+        let normalized_number = normalize_number(raw_number);
+        if normalized_number.is_empty() {
+            continue;
+        }
+        
+        let full_match = cap.get(0).unwrap().as_str().trim().to_string();
+        
+        // Create a normalized key for deduplication
+        let normalized_key = format!("{} {}", word, normalized_number);
+        
+        // Only add if we haven't seen this normalized match before
+        if normalized_matches.insert(normalized_key) {
             full_matches.push(full_match);
-            numbers.insert(number);
+            numbers.insert(normalized_number);
         }
     }
 

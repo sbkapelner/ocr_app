@@ -130,38 +130,41 @@
             pdfTable.appendChild(row);
         });
 
-        // Create a map to track unique matches and find duplicates
-        const seenMatches = new Set();
+        // Create a map to track numbers and their matches
         const numberToMatches = new Map();
-        const uniqueDocxMatches = [];
-        const uniqueDocxNumbers = [];
+        const seenMatches = new Set();
 
-        // First pass: build number to matches map and deduplicate
-        docxMatches.forEach((match, index) => {
-            if (!seenMatches.has(match)) {
-                seenMatches.add(match);
-                uniqueDocxMatches.push(match);
-                uniqueDocxNumbers.push(docxNumbers[index]);
-
-                const docxNumMatch = match.match(/\b\d+[a-zA-Z]?\b/);
-                const docxNumOnly = docxNumMatch ? docxNumMatch[0] : docxNumbers[index];
-                if (!numberToMatches.has(docxNumOnly)) {
-                    numberToMatches.set(docxNumOnly, []);
-                }
-                numberToMatches.get(docxNumOnly).push(match);
+        // First pass: normalize and deduplicate matches
+        const normalizedMatches = docxMatches.map((match, index) => ({
+            original: match.trim(),
+            normalized: match.trim().toLowerCase(),
+            number: docxNumbers[index],
+            index
+        })).filter(item => {
+            if (seenMatches.has(item.normalized)) {
+                return false;
             }
+            seenMatches.add(item.normalized);
+            return true;
         });
 
-        // Populate DOCX table with unique matches
+        // Second pass: build number to matches map
+        normalizedMatches.forEach(item => {
+            const docxNumMatch = item.original.match(/\b\d+[a-zA-Z]?\b/);
+            const docxNumOnly = docxNumMatch ? docxNumMatch[0] : item.number;
+            if (!numberToMatches.has(docxNumOnly)) {
+                numberToMatches.set(docxNumOnly, []);
+            }
+            numberToMatches.get(docxNumOnly).push(item.original);
+        });
+
+        // Populate DOCX table
         const docxTable = document.getElementById('docx-numbers');
-        uniqueDocxMatches.forEach((match, index) => {
-            const number = uniqueDocxNumbers[index];
+        normalizedMatches.forEach(item => {
             const row = document.createElement('tr');
-            // Extract just the number part from the DOCX match
-            const docxNumMatch = match.match(/\b\d+[a-zA-Z]?\b/);
-            const docxNumOnly = docxNumMatch ? docxNumMatch[0] : number;
-            const isChecked = savedState[stateKey]?.docx?.[match] ?? uniquePdfNumbers.some(pdfNum => {
-                // For PDF numbers, extract just the number part if it's not a FIG reference
+            const docxNumMatch = item.original.match(/\b\d+[a-zA-Z]?\b/);
+            const docxNumOnly = docxNumMatch ? docxNumMatch[0] : item.number;
+            const isChecked = savedState[stateKey]?.docx?.[item.original] ?? uniquePdfNumbers.some(pdfNum => {
                 if (pdfNum.toLowerCase().startsWith('fig')) return false;
                 const pdfNumMatch = pdfNum.match(/\b\d+[a-zA-Z]?\b/);
                 return pdfNumMatch && pdfNumMatch[0] === docxNumOnly;
@@ -170,11 +173,10 @@
             // If this number appears in multiple entries, show all entries in red
             const duplicateEntries = numberToMatches.get(docxNumOnly);
             const isDuplicate = duplicateEntries.length > 1;
-            const duplicateText = isDuplicate ? duplicateEntries.join(', ') : '';
             const style = isDuplicate ? 'color: #dc3545;' : '';
             row.innerHTML = `
-                <td style="${style}" title="${duplicateText}">${match}</td>
-                <td><input type="checkbox" class="docx-checkbox" data-match="${match}" ${isChecked ? 'checked' : ''}></td>
+                <td style="${style}" title="${isDuplicate ? 'Also appears in: ' + duplicateEntries.filter(m => m !== item.original).join(', ') : ''}">${item.original}</td>
+                <td><input type="checkbox" class="docx-checkbox" data-match="${item.original}" ${isChecked ? 'checked' : ''}></td>
             `;
             docxTable.appendChild(row);
         });

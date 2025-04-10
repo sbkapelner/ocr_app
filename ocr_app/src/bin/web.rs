@@ -18,6 +18,24 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use ocr_app::OcrResult;
 
+// Helper function to normalize a number
+fn normalize_number(num: &str) -> String {
+    let mut result = String::new();
+    let chars: Vec<char> = num.chars().collect();
+    let len = chars.len();
+    
+    for (i, c) in chars.iter().enumerate() {
+        if c.is_ascii_digit() {
+            result.push(*c);
+        } else if *c == '-' && i > 0 && i < len - 1 && 
+                  chars[i-1].is_ascii_digit() && chars[i+1].is_ascii_digit() {
+            // Only keep hyphen if it's between two digits
+            result.push(*c);
+        }
+    }
+    result
+}
+
 #[derive(serde::Serialize)]
 struct ProcessResponse {
     pages: Vec<PageResult>,
