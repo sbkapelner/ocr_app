@@ -211,38 +211,19 @@
 
 
         function displayResults(data, container) {
-            // Create containers for pages and numbers
+            // Create container for pages
             const pagesContainer = document.createElement('div');
             pagesContainer.className = 'pages-container';
-            const numbersPanel = document.createElement('div');
-            numbersPanel.className = 'numbers-panel';
-            numbersPanel.innerHTML = `
-                <div class="numbers-section">
-                    <div class="numbers-title">Numbers in Both Files (PDF & DOCX)</div>
-                    <div class="matching-list"></div>
-                </div>
-                <div class="numbers-section">
-                    <div class="numbers-title">Numbers Only in PDF</div>
-                    <div class="pdf-only-list"></div>
-                </div>
-                <div class="numbers-section">
-                    <div class="numbers-title">Numbers Only in DOCX</div>
-                    <div class="docx-only-list"></div>
-                </div>`;
 
             // Extract all numbers and track their bounding boxes
             const numbers = new Set();
             const numberBoxes = new Map();
             
             data.pages.forEach((page, pageIndex) => {
-                console.log(`Page ${pageIndex + 1} has ${page.ocr_results.length} OCR results`);
                 page.ocr_results.forEach(result => {
-                    console.log(`OCR result: '${result.text}' at bbox:`, result.bbox);
-                    
                     if (!/^FIG\.?\s*\d+/.test(result.text.trim())) {
                         result.text.split(' ').forEach(part => {
                             const trimmed = part.trim();
-                            // Use the same regex pattern as in the Rust code
                             if (trimmed && /\b\d+[a-zA-Z]?\b|\b\d+-\d+[a-zA-Z]?\b/.test(trimmed)) {
                                 numbers.add(trimmed);
                                 if (!numberBoxes.has(trimmed)) {
@@ -257,48 +238,17 @@
                     }
                 });
             });
-            
-            console.log('Found numbers:', Array.from(numbers));
-            console.log('Number boxes:', numberBoxes);
 
-            const matchingList = numbersPanel.querySelector('.matching-list');
-            const pdfOnlyList = numbersPanel.querySelector('.pdf-only-list');
-            const docxOnlyList = numbersPanel.querySelector('.docx-only-list');
-
-            function createNumberDiv(num, className, title) {
-                const numDiv = document.createElement('div');
-                numDiv.className = `text-line ${className}`;
-                numDiv.title = title;
-                numDiv.textContent = num;
-                return numDiv;
+            // Open comparison view in new tab
+            const comparisonUrl = new URL('/comparison', window.location.href);
+            comparisonUrl.searchParams.set('pdf', JSON.stringify(Array.from(numbers)));
+            comparisonUrl.searchParams.set('pdf_hash', lastPdfHash);
+            if (window.docxMatches) {
+                comparisonUrl.searchParams.set('docx_matches', JSON.stringify(window.docxMatches));
+                comparisonUrl.searchParams.set('docx_numbers', JSON.stringify(Array.from(docxNumbers)));
+                comparisonUrl.searchParams.set('docx_hash', lastDocxHash);
             }
-
-            // Numbers found in both files
-            Array.from(numbers).forEach(num => {
-                if (docxNumbers.has(num)) {
-                    matchingList.appendChild(
-                        createNumberDiv(num, 'match', 'Found in both PDF and DOCX')
-                    );
-                }
-            });
-
-            // Numbers only in PDF
-            Array.from(numbers).forEach(num => {
-                if (!docxNumbers.has(num)) {
-                    pdfOnlyList.appendChild(
-                        createNumberDiv(num, 'pdf-only', 'Found only in PDF')
-                    );
-                }
-            });
-
-            // Numbers only in DOCX
-            Array.from(docxNumbers).forEach(num => {
-                if (!numbers.has(num)) {
-                    docxOnlyList.appendChild(
-                        createNumberDiv(num, 'docx-only', 'Found only in DOCX')
-                    );
-                }
-            });
+            window.open(comparisonUrl.toString(), '_blank');
 
             // Create thumbnail navigation
             const thumbnailNav = document.createElement('div');
@@ -356,7 +306,6 @@
             pagesContainer.appendChild(thumbnailNav);
             pagesContainer.appendChild(pagesViewer);
             container.appendChild(pagesContainer);
-            container.appendChild(numbersPanel);
 
             // Activate first thumbnail
             if (data.pages.length > 0) {
@@ -395,8 +344,10 @@
                 }
 
                 const docxData = await docxResponse.json();
-                docxNumbers = new Set(docxData.numbers); // Store for comparison
+                docxNumbers = new Set(docxData.numbers); // Store numbers for comparison
+                console.log('DOCX Matches:', docxData.matches);
                 console.log('DOCX Numbers:', docxData.numbers);
+                window.docxMatches = docxData.matches; // Store matches globally
                 
                 // Store DOCX hash from server
                 const docxHash = docxData.file_hash;

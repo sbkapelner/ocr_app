@@ -26,7 +26,8 @@ struct ProcessResponse {
 
 #[derive(serde::Serialize)]
 struct DocxProcessResponse {
-    numbers: Vec<String>,
+    matches: Vec<String>,     // Full matches like "word 123"
+    numbers: Vec<String>,     // Just the numbers for comparison
     html_content: String,
     file_hash: String,
 }
@@ -48,13 +49,21 @@ struct AppState {
     engine: OcrEngine,
 }
 
+async fn comparison_view() -> Html<String> {
+    let template_path = "templates/comparison.html";
+    match tokio::fs::read_to_string(template_path).await {
+        Ok(content) => Html(content),
+        Err(e) => Html(format!("Error reading comparison.html: {}", e))
+    }
+}
+
 async fn index() -> Html<String> {
     println!("[DEBUG] Index route called");
-    let index_path = "/app/templates/index.html";
+    let index_path = "templates/index.html";
     println!("[DEBUG] Looking for index.html at: {}", index_path);
     println!("[DEBUG] Current working directory: {}", std::env::current_dir().unwrap().display());
     println!("[DEBUG] Directory contents:");
-    if let Ok(entries) = std::fs::read_dir("/app/templates") {
+    if let Ok(entries) = std::fs::read_dir("templates") {
         for entry in entries {
             if let Ok(entry) = entry {
                 println!("[DEBUG] - {}", entry.path().display());
@@ -140,6 +149,7 @@ async fn process_docx(
 
     // Return the results
     Ok(Json(DocxProcessResponse { 
+        matches: results.full_matches,
         numbers: results.numbers,
         html_content,
         file_hash: hash
@@ -221,8 +231,8 @@ async fn process_pdf(
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize OCR engine with models
-    let detection_model_path = PathBuf::from("/app/models/text-detection-checkpoint-03.23.recall_92.precis_85.rten");
-    let rec_model_path = PathBuf::from("/app/models/text-rec-checkpoint-7.rten");
+    let detection_model_path = PathBuf::from("models/text-detection-checkpoint-03.23.recall_92.precis_85.rten");
+    let rec_model_path = PathBuf::from("models/text-rec-checkpoint-7.rten");
 
     // Load models
     let detection_model = ocr_app::models::load_model(detection_model_path.to_str().unwrap())
@@ -247,7 +257,8 @@ async fn main() -> Result<()> {
         .route("/", get(index))
         .route("/process-pdf", post(process_pdf))
         .route("/process-docx", post(process_docx))
-        .nest_service("/static", ServeDir::new("/app/static"))
+        .route("/comparison", get(comparison_view))
+        .nest_service("/static", ServeDir::new("static"))
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024))  // 50MB limit
         .with_state(state);
     println!("[DEBUG] Router configured with routes: /, /process-pdf, /process-docx, /static");

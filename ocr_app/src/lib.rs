@@ -74,8 +74,9 @@ pub struct OcrResult {
 
 #[derive(serde::Serialize)]
 pub struct DocxResult {
-    pub numbers: Vec<String>,  // Extracted numbers in order of appearance
-    pub paragraphs: Vec<String>,  // Text content split into paragraphs
+    pub full_matches: Vec<String>,  // Full matches like "word 123"
+    pub numbers: Vec<String>,      // Just the numbers for comparison
+    pub paragraphs: Vec<String>,   // Text content split into paragraphs
 }
 
 
@@ -175,30 +176,58 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<
         }
     }
 
-    // Create regex patterns for different number formats
-    let number_pattern = Regex::new(r"\b\d+[a-zA-Z]?\b|\b\d+-\d+[a-zA-Z]?\b")
+    // Create regex pattern for words followed by numbers
+    let pattern = Regex::new(r"\b\w+\s+([0-9]+(?:-[0-9]+)?[a-zA-Z]?)\b")
         .context("Failed to create regex pattern")?;
 
-    // Extract unique numbers using regex
+    // Extract full matches and their numbers
+    let mut full_matches = Vec::new();
     let mut numbers = HashSet::new();
-    for cap in number_pattern.find_iter(&text) {
-        numbers.insert(cap.as_str().to_string());
+
+    for cap in pattern.captures_iter(&text) {
+        // Get the full match (e.g., "word 123")
+        let full_match = cap.get(0).unwrap().as_str().to_string();
+        // Get just the number part (e.g., "123")
+        let number = cap.get(1).unwrap().as_str().to_string();
+        
+        full_matches.push(full_match);
+        numbers.insert(number);
     }
 
-    // Convert to sorted vector
+    // Sort the full matches based on their number parts
+    full_matches.sort_by(|a, b| {
+        let a_num = pattern.captures(a)
+            .and_then(|cap| cap.get(1))
+            .map(|m| m.as_str())
+            .unwrap_or("");
+        let b_num = pattern.captures(b)
+            .and_then(|cap| cap.get(1))
+            .map(|m| m.as_str())
+            .unwrap_or("");
+
+        let a_val = a_num.chars().take_while(|c| c.is_digit(10)).collect::<String>();
+        let b_val = b_num.chars().take_while(|c| c.is_digit(10)).collect::<String>();
+
+        match (a_val.parse::<i32>(), b_val.parse::<i32>()) {
+            (Ok(a_val), Ok(b_val)) => a_val.cmp(&b_val),
+            _ => a.cmp(b)
+        }
+    });
+
+    // Convert numbers set to sorted vector
     let mut numbers_vec: Vec<String> = numbers.into_iter().collect();
     numbers_vec.sort_by(|a, b| {
-        // First try to parse as integers for numerical sorting
-        let a_num = a.chars().take_while(|c| c.is_digit(10)).collect::<String>();
-        let b_num = b.chars().take_while(|c| c.is_digit(10)).collect::<String>();
-        
-        match (a_num.parse::<i32>(), b_num.parse::<i32>()) {
+        let a_val = a.chars().take_while(|c| c.is_digit(10)).collect::<String>();
+        let b_val = b.chars().take_while(|c| c.is_digit(10)).collect::<String>();
+
+        match (a_val.parse::<i32>(), b_val.parse::<i32>()) {
             (Ok(a_val), Ok(b_val)) => a_val.cmp(&b_val),
-            _ => a.cmp(b) // Fall back to string comparison if parsing fails
+            _ => a.cmp(b)
         }
     });
 
     Ok(DocxResult {
+        full_matches,
         numbers: numbers_vec,
         paragraphs
     })

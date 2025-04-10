@@ -28,11 +28,11 @@ RUN apt-get update && apt-get install -y \
     libfontconfig1 \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-COPY --from=builder /usr/src/ocr_app/target/release/web /app/
-COPY --from=builder /usr/src/ocr_app/templates /app/templates
-COPY --from=builder /usr/src/ocr_app/static /app/static
-COPY --from=builder /usr/src/ocr_app/models /app/models
+WORKDIR /
+COPY --from=builder /usr/src/ocr_app/target/release/web /
+COPY --from=builder /usr/src/ocr_app/templates /templates
+COPY --from=builder /usr/src/ocr_app/static /static
+COPY --from=builder /usr/src/ocr_app/models /models
 
 EXPOSE 8080
 
