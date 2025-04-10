@@ -112,7 +112,9 @@
         const pdfTable = document.getElementById('pdf-numbers');
         uniquePdfNumbers.forEach(number => {
             const row = document.createElement('tr');
-            const isChecked = savedState[stateKey]?.pdf?.[number] ?? docxNumbers.includes(number);
+            // For PDF numbers, extract just the number part if it's not a FIG reference
+            const numOnly = !number.toLowerCase().startsWith('fig') ? (number.match(/\b\d+[a-zA-Z]?\b/) || [number])[0] : number;
+            const isChecked = savedState[stateKey]?.pdf?.[number] ?? docxNumbers.includes(numOnly);
             row.innerHTML = `
                 <td>${number}</td>
                 <td><input type="checkbox" class="pdf-checkbox" data-number="${number}" ${isChecked ? 'checked' : ''}></td>
@@ -125,7 +127,15 @@
         docxMatches.forEach((match, index) => {
             const number = docxNumbers[index];
             const row = document.createElement('tr');
-            const isChecked = savedState[stateKey]?.docx?.[match] ?? uniquePdfNumbers.includes(number);
+            // Extract just the number part from the DOCX match
+            const docxNumMatch = match.match(/\b\d+[a-zA-Z]?\b/);
+            const docxNumOnly = docxNumMatch ? docxNumMatch[0] : number;
+            const isChecked = savedState[stateKey]?.docx?.[match] ?? uniquePdfNumbers.some(pdfNum => {
+                // For PDF numbers, extract just the number part if it's not a FIG reference
+                if (pdfNum.toLowerCase().startsWith('fig')) return false;
+                const pdfNumMatch = pdfNum.match(/\b\d+[a-zA-Z]?\b/);
+                return pdfNumMatch && pdfNumMatch[0] === docxNumOnly;
+            });
             row.innerHTML = `
                 <td>${match}</td>
                 <td><input type="checkbox" class="docx-checkbox" data-match="${match}" ${isChecked ? 'checked' : ''}></td>

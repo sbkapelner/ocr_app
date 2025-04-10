@@ -181,8 +181,9 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<
         .context("Failed to create regex pattern")?;
 
     // Extract full matches and their numbers
-    let mut full_matches = Vec::new();
+    let mut full_matches_set = HashSet::new();
     let mut numbers = HashSet::new();
+    let mut full_matches = Vec::new();
 
     for cap in pattern.captures_iter(&text) {
         // Get the full match (e.g., "word 123")
@@ -190,27 +191,41 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<
         // Get just the number part (e.g., "123")
         let number = cap.get(1).unwrap().as_str().to_string();
         
-        full_matches.push(full_match);
-        numbers.insert(number);
+        // Only add if we haven't seen this match before
+        if full_matches_set.insert(full_match.clone()) {
+            full_matches.push(full_match);
+            numbers.insert(number);
+        }
     }
 
-    // Sort the full matches based on their number parts
+    // Sort the full matches alphabetically by the word before the number
     full_matches.sort_by(|a, b| {
-        let a_num = pattern.captures(a)
-            .and_then(|cap| cap.get(1))
-            .map(|m| m.as_str())
-            .unwrap_or("");
-        let b_num = pattern.captures(b)
-            .and_then(|cap| cap.get(1))
-            .map(|m| m.as_str())
-            .unwrap_or("");
+        // Extract the word part (everything before the number)
+        let a_word = a.split_whitespace().next().unwrap_or("").to_lowercase();
+        let b_word = b.split_whitespace().next().unwrap_or("").to_lowercase();
 
-        let a_val = a_num.chars().take_while(|c| c.is_digit(10)).collect::<String>();
-        let b_val = b_num.chars().take_while(|c| c.is_digit(10)).collect::<String>();
+        // First compare words
+        match a_word.cmp(&b_word) {
+            std::cmp::Ordering::Equal => {
+                // If words are the same, compare numbers
+                let a_num = pattern.captures(a)
+                    .and_then(|cap| cap.get(1))
+                    .map(|m| m.as_str())
+                    .unwrap_or("");
+                let b_num = pattern.captures(b)
+                    .and_then(|cap| cap.get(1))
+                    .map(|m| m.as_str())
+                    .unwrap_or("");
 
-        match (a_val.parse::<i32>(), b_val.parse::<i32>()) {
-            (Ok(a_val), Ok(b_val)) => a_val.cmp(&b_val),
-            _ => a.cmp(b)
+                let a_val = a_num.chars().take_while(|c| c.is_digit(10)).collect::<String>();
+                let b_val = b_num.chars().take_while(|c| c.is_digit(10)).collect::<String>();
+
+                match (a_val.parse::<i32>(), b_val.parse::<i32>()) {
+                    (Ok(a_val), Ok(b_val)) => a_val.cmp(&b_val),
+                    _ => a_num.cmp(b_num)
+                }
+            },
+            other => other
         }
     });
 

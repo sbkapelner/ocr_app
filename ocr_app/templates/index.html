@@ -25,11 +25,6 @@
                 <path fill="currentColor" d="M21 5v14c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2h14c1.1 0 2 .9 2 2zm-2 0H5v14h14V5zm-3 3h-3v9h3v-9zm-5 0H8v9h3v-9z"/>
             </svg>
         </button>
-        <button class="toolbar-btn" id="toggle-numbers" title="Toggle Number List">
-            <svg viewBox="0 0 24 24" width="24" height="24">
-                <path fill="currentColor" d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/>
-            </svg>
-        </button>
     </div>
 <div class="sub-background">
         <div class="main-content">
@@ -73,11 +68,7 @@
                 this.classList.toggle('active');
             });
 
-            document.getElementById('toggle-numbers').addEventListener('click', function() {
-                const panel = document.querySelector('.numbers-section');
-                panel.classList.toggle('hidden');
-                this.classList.toggle('active');
-            });
+
 
             // Set initial active state for all components
             document.querySelectorAll('.toolbar-btn').forEach(btn => btn.classList.add('active'));
@@ -221,21 +212,35 @@
             
             data.pages.forEach((page, pageIndex) => {
                 page.ocr_results.forEach(result => {
-                    if (!/^FIG\.?\s*\d+/.test(result.text.trim())) {
-                        result.text.split(' ').forEach(part => {
-                            const trimmed = part.trim();
-                            if (trimmed && /\b\d+[a-zA-Z]?\b|\b\d+-\d+[a-zA-Z]?\b/.test(trimmed)) {
-                                numbers.add(trimmed);
-                                if (!numberBoxes.has(trimmed)) {
-                                    numberBoxes.set(trimmed, []);
-                                }
-                                numberBoxes.get(trimmed).push({
-                                    pageIndex,
-                                    bbox: result.bbox
-                                });
-                            }
+                    const text = result.text.trim();
+                    // Check if it's a figure reference
+                    const figMatch = text.match(/^FIG\.?\s*\d+[a-zA-Z]?/i);
+                    if (figMatch) {
+                        // Add the full FIG. X text
+                        const fullFigText = figMatch[0];
+                        numbers.add(fullFigText);
+                        if (!numberBoxes.has(fullFigText)) {
+                            numberBoxes.set(fullFigText, []);
+                        }
+                        numberBoxes.get(fullFigText).push({
+                            pageIndex,
+                            bbox: result.bbox
                         });
                     }
+                    // Process other numbers
+                    text.split(' ').forEach(part => {
+                        const trimmed = part.trim();
+                        if (trimmed && /\b\d+[a-zA-Z]?\b|\b\d+-\d+[a-zA-Z]?\b/.test(trimmed) && !/^FIG/i.test(trimmed)) {
+                            numbers.add(trimmed);
+                            if (!numberBoxes.has(trimmed)) {
+                                numberBoxes.set(trimmed, []);
+                            }
+                            numberBoxes.get(trimmed).push({
+                                pageIndex,
+                                bbox: result.bbox
+                            });
+                        }
+                    });
                 });
             });
 
@@ -392,81 +397,16 @@
                 docxContainer.style.flex = '0 0 45%';
                 docxContainer.innerHTML = docxData.html_content;
 
-                // Create container for numbers panel
-                const numbersPanel = document.createElement('div');
-                numbersPanel.className = 'numbers-section';
 
-                // Create sections for numbers
-                const commonSection = document.createElement('div');
-                commonSection.innerHTML = '<h3>Numbers in Both Files</h3>';
-
-                const pdfOnlySection = document.createElement('div');
-                pdfOnlySection.innerHTML = '<h3>Numbers Only in PDF</h3>';
-
-                const docxOnlySection = document.createElement('div');
-                docxOnlySection.innerHTML = '<h3>Numbers Only in DOCX</h3>';
 
                 // Process and display PDF results
                 displayResults(pdfData, pdfContainer);
 
-                // Process numbers from PDF
-                const pdfNumbers = new Set(pdfData.pages.flatMap(page => 
-                    page.ocr_results.map(result => result.text)));
-
-                // Categorize and display numbers
-                pdfNumbers.forEach(num => {
-                    const div = document.createElement('div');
-                    div.className = 'text-line';
-                    
-                    const checkbox = document.createElement('input');
-                    checkbox.type = 'checkbox';
-                    
-                    const text = document.createElement('span');
-                    text.textContent = num;
-                    
-                    if (docxNumbers.has(num)) {
-                        div.classList.add('match');
-                        checkbox.checked = true;
-                        commonSection.appendChild(div);
-                    } else {
-                        div.classList.add('pdf-only');
-                        checkbox.checked = false;
-                        pdfOnlySection.appendChild(div);
-                    }
-                    
-                    div.appendChild(checkbox);
-                    div.appendChild(text);
-                });
-
-                docxNumbers.forEach(num => {
-                    if (!pdfNumbers.has(num)) {
-                        const div = document.createElement('div');
-                        div.className = 'text-line';
-                        div.classList.add('docx-only');
-                        
-                        const checkbox = document.createElement('input');
-                        checkbox.type = 'checkbox';
-                        checkbox.checked = false;
-                        
-                        const text = document.createElement('span');
-                        text.textContent = num;
-                        
-                        div.appendChild(checkbox);
-                        div.appendChild(text);
-                        docxOnlySection.appendChild(div);
-                    }
-                });
-
-                // Add sections to panel
-                numbersPanel.appendChild(commonSection);
-                numbersPanel.appendChild(pdfOnlySection);
-                numbersPanel.appendChild(docxOnlySection);
 
                 // Create the main container with grid layout
                 resultsContainer.appendChild(pdfContainer.querySelector('.thumbnail-nav'));
                 resultsContainer.appendChild(pdfContainer.querySelector('.pages-viewer'));
                 resultsContainer.appendChild(docxContainer);
-                resultsContainer.appendChild(numbersPanel);
 
             } catch (error) {
                 resultsContainer.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
