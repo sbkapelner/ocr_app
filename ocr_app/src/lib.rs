@@ -128,22 +128,73 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
                 }
             }
 
-            ocr_results.push(OcrResult {
-                text: text.to_string(),
-                bbox: [
-                    min_x / width as f32,   // Normalize coordinates
-                    min_y / height as f32,
-                    max_x / width as f32,
-                    max_y / height as f32,
-                ],
-            });
+            let text = text.to_string();
+            // First normalize the text to handle word variations
+            let text = normalize_text(&text);
+            // Then if it contains digits, normalize those too
+            let text = if text.chars().any(|c| c.is_ascii_digit()) {
+                normalize_number(&text)
+            } else {
+                text
+            };
+            
+            if !text.is_empty() {
+                ocr_results.push(OcrResult {
+                    text,
+                    bbox: [
+                        min_x / width as f32,   // Normalize coordinates
+                        min_y / height as f32,
+                        max_x / width as f32,
+                        max_y / height as f32,
+                    ],
+                });
+            }
         }
     }
     Ok(ocr_results)
 }
 
-// Helper function to normalize a number
-fn normalize_number(num: &str) -> String {
+/// Helper function to normalize text by converting plurals to singular form
+fn normalize_text(text: &str) -> String {
+    // First convert to lowercase
+    let text = text.to_lowercase();
+    
+    // Split into words
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let normalized_words: Vec<String> = words.iter()
+        .map(|word| {
+            let w = *word;
+            if w.len() < 3 { return w.to_string(); }  // Too short to be plural
+            
+            // Rule 1: words ending in 'ies' -> 'y'
+            if w.ends_with("ies") && w.len() > 3 {
+                return format!("{}{}", &w[..w.len()-3], "y");
+            }
+            
+            // Rule 2: words ending in 'es' -> remove 'es'
+            if w.ends_with("es") {
+                // Special case: if word ends in 'xes', 'ches', 'shes', 'sses'
+                if w.ends_with("xes") || w.ends_with("ches") || 
+                   w.ends_with("shes") || w.ends_with("sses") {
+                    return w[..w.len()-2].to_string();
+                }
+                return w[..w.len()-2].to_string();
+            }
+            
+            // Rule 3: words ending in 's' -> remove 's'
+            if w.ends_with('s') && !w.ends_with("ss") {
+                return w[..w.len()-1].to_string();
+            }
+            
+            w.to_string()
+        })
+        .collect();
+    
+    normalized_words.join(" ")
+}
+
+/// Helper function to normalize a number by removing special characters and keeping only digits and valid hyphens
+pub fn normalize_number(num: &str) -> String {
     let mut result = String::new();
     let chars: Vec<char> = num.chars().collect();
     let len = chars.len();
@@ -215,6 +266,9 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<
     // Create regex pattern for words followed by any non-whitespace that contains a number
     let pattern = Regex::new(r"\b(\w+)\s+([^\s]*[0-9][^\s]*)\b")
         .context("Failed to create regex pattern")?;
+
+    // First normalize all text to handle word variations
+    let text = normalize_text(&text);
 
     // Extract full matches and their numbers
     let mut normalized_matches = HashSet::new();
