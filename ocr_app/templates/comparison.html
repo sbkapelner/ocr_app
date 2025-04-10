@@ -18,6 +18,14 @@
         .pdf-table {
             border: 2px solid #dc3545;
         }
+        .duplicate-number {
+            color: #dc3545;
+            font-weight: bold;
+            position: relative;
+        }
+        .duplicate-number:hover {
+            cursor: help;
+        }
         .docx-table {
             border: 2px solid #0d6efd;
         }
@@ -122,10 +130,32 @@
             pdfTable.appendChild(row);
         });
 
-        // Populate DOCX table
-        const docxTable = document.getElementById('docx-numbers');
+        // Create a map to track unique matches and find duplicates
+        const seenMatches = new Set();
+        const numberToMatches = new Map();
+        const uniqueDocxMatches = [];
+        const uniqueDocxNumbers = [];
+
+        // First pass: build number to matches map and deduplicate
         docxMatches.forEach((match, index) => {
-            const number = docxNumbers[index];
+            if (!seenMatches.has(match)) {
+                seenMatches.add(match);
+                uniqueDocxMatches.push(match);
+                uniqueDocxNumbers.push(docxNumbers[index]);
+
+                const docxNumMatch = match.match(/\b\d+[a-zA-Z]?\b/);
+                const docxNumOnly = docxNumMatch ? docxNumMatch[0] : docxNumbers[index];
+                if (!numberToMatches.has(docxNumOnly)) {
+                    numberToMatches.set(docxNumOnly, []);
+                }
+                numberToMatches.get(docxNumOnly).push(match);
+            }
+        });
+
+        // Populate DOCX table with unique matches
+        const docxTable = document.getElementById('docx-numbers');
+        uniqueDocxMatches.forEach((match, index) => {
+            const number = uniqueDocxNumbers[index];
             const row = document.createElement('tr');
             // Extract just the number part from the DOCX match
             const docxNumMatch = match.match(/\b\d+[a-zA-Z]?\b/);
@@ -136,8 +166,14 @@
                 const pdfNumMatch = pdfNum.match(/\b\d+[a-zA-Z]?\b/);
                 return pdfNumMatch && pdfNumMatch[0] === docxNumOnly;
             });
+
+            // If this number appears in multiple entries, show all entries in red
+            const duplicateEntries = numberToMatches.get(docxNumOnly);
+            const isDuplicate = duplicateEntries.length > 1;
+            const duplicateText = isDuplicate ? duplicateEntries.join(', ') : '';
+            const style = isDuplicate ? 'color: #dc3545;' : '';
             row.innerHTML = `
-                <td>${match}</td>
+                <td style="${style}" title="${duplicateText}">${match}</td>
                 <td><input type="checkbox" class="docx-checkbox" data-match="${match}" ${isChecked ? 'checked' : ''}></td>
             `;
             docxTable.appendChild(row);
