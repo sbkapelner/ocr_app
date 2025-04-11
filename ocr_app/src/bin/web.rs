@@ -18,6 +18,15 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use ocr_app::OcrResult;
 
+#[derive(serde::Deserialize)]
+struct LabelOptions {
+    allow_2: bool,
+    allow_3: bool,
+    allow_4: bool,
+    allow_letters: bool,
+    allow_hyphen: bool,
+}
+
 #[derive(serde::Serialize)]
 struct ProcessResponse {
     pages: Vec<PageResult>,
@@ -91,25 +100,39 @@ async fn process_docx(
 ) -> Result<Json<DocxProcessResponse>, String> {
     println!("[DEBUG] Starting DOCX processing");
     // Get the DOCX file from the form data
-    let field = multipart
+    // Get the DOCX file
+    let mut docx_data = None;
+    let mut label_options: Option<LabelOptions> = None;
+
+    while let Some(field) = multipart
         .next_field()
         .await
-        .map_err(|e| format!("Failed to get form field: {}", e))?;
-
-    if field.is_none() {
-        return Err("No file provided".to_string());
+        .map_err(|e| format!("Failed to get form field: {}", e))? 
+    {
+        match field.name() {
+            Some("docx") => {
+                docx_data = Some(
+                    field.bytes()
+                        .await
+                        .map_err(|e| format!("Failed to read file data: {}", e))?
+                );
+            }
+            Some("label_options") => {
+                let options_str = field
+                    .text()
+                    .await
+                    .map_err(|e| format!("Failed to read label options: {}", e))?;
+                label_options = Some(
+                    serde_json::from_str(&options_str)
+                        .map_err(|e| format!("Failed to parse label options: {}", e))?
+                );
+            }
+            _ => continue,
+        }
     }
 
-    let field = field.unwrap();
-    if field.name() != Some("docx") {
-        return Err("Invalid form field name".to_string());
-    }
-
-    // Read the file data
-    let data = field
-        .bytes()
-        .await
-        .map_err(|e| format!("Failed to read file data: {}", e))?;
+    let data = docx_data.ok_or_else(|| "No DOCX file provided".to_string())?;
+    let options = label_options.ok_or_else(|| "No label options provided".to_string())?;
 
     // Calculate SHA-256 hash
     let mut hasher = Sha256::new();
@@ -128,7 +151,7 @@ async fn process_docx(
 
     // Process the DOCX
     println!("[DEBUG] Processing DOCX file: {}", file_path.display());
-    let results = match ocr_app::process_docx(&state.engine, file_path) {
+    let results = match ocr_app::process_docx(&state.engine, file_path, options.allow_2, options.allow_3, options.allow_4, options.allow_letters, options.allow_hyphen) {
         Ok(r) => r,
         Err(e) => {
             println!("[DEBUG] DOCX processing error: {}", e);

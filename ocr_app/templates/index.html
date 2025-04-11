@@ -44,6 +44,42 @@
         </div>
     </div>
 
+    <div class="label-options" style="margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
+        <h4 style="margin-bottom: 15px;">Label Format Options</h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="allow-2" checked>
+                <label class="form-check-label" for="allow-2">
+                    2-digit numbers (e.g., 12)
+                </label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="allow-3" checked>
+                <label class="form-check-label" for="allow-3">
+                    3-digit numbers (e.g., 123)
+                </label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="allow-4" checked>
+                <label class="form-check-label" for="allow-4">
+                    4-digit numbers (e.g., 1234)
+                </label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="allow-letters" checked>
+                <label class="form-check-label" for="allow-letters">
+                    Letters after numbers (e.g., 123a)
+                </label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="allow-hyphen" checked>
+                <label class="form-check-label" for="allow-hyphen">
+                    Hyphenated numbers (e.g., 123-4)
+                </label>
+            </div>
+        </div>
+    </div>
+
     <div style="display: flex; gap: 10px;">
         <button id="process-btn" onclick="processFile()" disabled>Process Files</button>
         <button id="reset-btn" onclick="resetPage()" style="background-color: #dc3545;">Reset</button>
@@ -328,7 +364,14 @@
                 return;
             }
 
-
+            // Get label format options
+            const labelOptions = {
+                allow_2: document.getElementById('allow-2').checked,
+                allow_3: document.getElementById('allow-3').checked,
+                allow_4: document.getElementById('allow-4').checked,
+                allow_letters: document.getElementById('allow-letters').checked,
+                allow_hyphen: document.getElementById('allow-hyphen').checked
+            };
 
             const resultsContainer = document.getElementById('results');
             resultsContainer.innerHTML = '<div class="text-line">Processing...</div>';
@@ -338,6 +381,7 @@
                 // First process DOCX to get reference numbers
                 const docxFormData = new FormData();
                 docxFormData.append('docx', currentDocxFile);
+                docxFormData.append('label_options', JSON.stringify(labelOptions));
 
                 const docxResponse = await fetch('/process-docx', {
                     method: 'POST',
@@ -362,6 +406,7 @@
                 // Then process PDF
                 const pdfFormData = new FormData();
                 pdfFormData.append('pdf', currentPdfFile);
+                pdfFormData.append('label_options', JSON.stringify(labelOptions));
 
                 const pdfResponse = await fetch('/process-pdf', {
                     method: 'POST',

@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 use std::path::Path;
 use std::collections::HashSet;
 use anyhow::{Context, Result};
@@ -133,7 +136,29 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
             let text = normalize_text(&text);
             // Then if it contains digits, normalize those too
             let text = if text.chars().any(|c| c.is_ascii_digit()) {
-                normalize_number(&text)
+                // Use default label options for OCR processing
+                let label_regex = build_label_regex(true, true, true, true, true);
+                let tokens: Vec<&str> = text.split_whitespace().collect();
+                let mut results = Vec::new();
+                
+                for raw_token in tokens {
+                    let cleaned = clean_token(raw_token);
+                    if cleaned.is_empty() { continue; }
+                    
+                    if label_regex.is_match(&cleaned) {
+                        results.push(cleaned);
+                    } else {
+                        // Try to split merged tokens
+                        let split_parts = split_merged_label(&cleaned, &label_regex);
+                        results.extend(split_parts);
+                    }
+                }
+                
+                // Remove duplicates while preserving order
+                let mut seen = HashSet::new();
+                results.retain(|x| seen.insert(x.clone()));
+                
+                results.join(" ")
             } else {
                 text
             };
@@ -193,57 +218,95 @@ fn normalize_text(text: &str) -> String {
     normalized_words.join(" ")
 }
 
-/// Helper function to normalize a number by splitting on special characters and handling hyphens
-pub fn normalize_number(num: &str) -> String {
-    // First split on any non-digit, non-hyphen character
-    let parts: Vec<&str> = num.split(|c: char| !c.is_ascii_digit() && c != '-')
-        .filter(|s| !s.is_empty())
-        .collect();
+/// Build a regex pattern for matching valid label numbers
+fn build_label_regex(allow_2: bool, allow_3: bool, allow_4: bool, allow_letters: bool, allow_hyphen: bool) -> Regex {
+    let mut patterns = Vec::new();
     
-    // Process each part and collect valid numbers
-    let mut numbers = Vec::new();
-    
-    for part in parts {
-        let chars: Vec<char> = part.chars().collect();
-        if chars.is_empty() { continue; }
-        
-        // If it's just digits, add it directly
-        if chars.iter().all(|c| c.is_ascii_digit()) {
-            numbers.push(part.to_string());
-            continue;
+    if allow_2 {
+        patterns.push(r"\d{2}");
+        if allow_letters {
+            patterns.push(r"\d{2}[a-zA-Z]");
         }
-        
-        // Handle parts with hyphens
-        let len = chars.len();
-        
-        // Case 1: Leading or trailing hyphen (e.g., -30 or 30-)
-        if (chars[0] == '-' && chars[1..].iter().all(|c| c.is_ascii_digit())) ||
-           (chars[len-1] == '-' && chars[..len-1].iter().all(|c| c.is_ascii_digit())) {
-            numbers.push(chars.iter()
-                .filter(|c| c.is_ascii_digit())
-                .collect::<String>());
-            continue;
+    }
+    if allow_3 {
+        patterns.push(r"\d{3}");
+        if allow_letters {
+            patterns.push(r"\d{3}[a-zA-Z]");
         }
-        
-        // Case 2: Hyphen between numbers (e.g., 30-40)
-        let mut current_num = String::new();
-        for (i, c) in chars.iter().enumerate() {
-            if c.is_ascii_digit() {
-                current_num.push(*c);
-            } else if *c == '-' && i > 0 && i < len - 1 &&
-                      chars[i-1].is_ascii_digit() && chars[i+1].is_ascii_digit() {
-                current_num.push(*c);
-            }
+        if allow_hyphen {
+            patterns.push(r"\d{3}-\d");
         }
-        if !current_num.is_empty() {
-            numbers.push(current_num);
+    }
+    if allow_4 {
+        patterns.push(r"\d{4}");
+        if allow_letters {
+            patterns.push(r"\d{4}[a-zA-Z]");
+        }
+        if allow_hyphen {
+            patterns.push(r"\d{4}-\d");
         }
     }
     
-    numbers.join(" ")
+    Regex::new(&format!(r"({})", patterns.join("|"))).unwrap()
 }
 
-pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<DocxResult> {
+/// Clean a token by removing all non-word and non-hyphen characters
+fn clean_token(raw: &str) -> String {
+    raw.chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-')
+        .collect()
+}
+
+/// Try to split a merged label into valid parts
+fn split_merged_label(token: &str, label_regex: &Regex) -> Vec<String> {
+    let token = clean_token(token);
+    let mut results = Vec::new();
+    
+    // Try all possible splits
+    for i in 2..token.len()-1 {
+        let left = &token[..i];
+        let right = &token[i..];
+        
+        if label_regex.is_match(left) && label_regex.is_match(right) {
+            results.push(left.to_string());
+            results.push(right.to_string());
+            break;  // assume only one valid split
+        }
+    }
+    
+    results
+}
+
+/// Helper function to normalize a number by applying label rules
+pub fn normalize_number(num: &str, allow_2: bool, allow_3: bool, allow_4: bool, allow_letters: bool, allow_hyphen: bool) -> String {
+    // Initialize regex pattern with provided options
+    let label_regex = build_label_regex(allow_2, allow_3, allow_4, allow_letters, allow_hyphen);
+    
+    // Split input on whitespace
+    let tokens: Vec<&str> = num.split_whitespace().collect();
+    let mut results = Vec::new();
+    
+    for raw_token in tokens {
+        let cleaned = clean_token(raw_token);
+        if cleaned.is_empty() { continue; }
+        
+        if label_regex.is_match(&cleaned) {
+            results.push(cleaned);
+        } else {
+            // Try to split merged tokens
+            let split_parts = split_merged_label(&cleaned, &label_regex);
+            results.extend(split_parts);
+        }
+    }
+    
+    // Remove duplicates while preserving order
+    let mut seen = HashSet::new();
+    results.retain(|x| seen.insert(x.clone()));
+    
+    results.join(" ")
+}
+
+pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: bool, allow_3: bool, allow_4: bool, allow_letters: bool, allow_hyphen: bool) -> Result<DocxResult> {
     // Read DOCX file
     let docx_content = std::fs::read(docx_path)
         .context("Failed to read DOCX file")?;
@@ -278,21 +341,32 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<
     }
 
     // Helper function to normalize a number
-    fn normalize_number(num: &str) -> String {
-        let mut result = String::new();
-        let chars: Vec<char> = num.chars().collect();
-        let len = chars.len();
+    fn normalize_number(num: &str, allow_2: bool, allow_3: bool, allow_4: bool, allow_letters: bool, allow_hyphen: bool) -> String {
+        // Initialize regex pattern with provided options
+        let label_regex = build_label_regex(allow_2, allow_3, allow_4, allow_letters, allow_hyphen);
         
-        for (i, c) in chars.iter().enumerate() {
-            if c.is_ascii_digit() {
-                result.push(*c);
-            } else if *c == '-' && i > 0 && i < len - 1 && 
-                      chars[i-1].is_ascii_digit() && chars[i+1].is_ascii_digit() {
-                // Only keep hyphen if it's between two digits
-                result.push(*c);
+        // Split input on whitespace
+        let tokens: Vec<&str> = num.split_whitespace().collect();
+        let mut results = Vec::new();
+        
+        for raw_token in tokens {
+            let cleaned = clean_token(raw_token);
+            if cleaned.is_empty() { continue; }
+            
+            if label_regex.is_match(&cleaned) {
+                results.push(cleaned);
+            } else {
+                // Try to split merged tokens
+                let split_parts = split_merged_label(&cleaned, &label_regex);
+                results.extend(split_parts);
             }
         }
-        result
+        
+        // Remove duplicates while preserving order
+        let mut seen = HashSet::new();
+        results.retain(|x| seen.insert(x.clone()));
+        
+        results.join(" ")
     }
 
     // Create regex pattern for words followed by any non-whitespace that contains a number
@@ -313,7 +387,7 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<
             continue;
         }
         
-        let normalized_number = normalize_number(raw_number);
+        let normalized_number = normalize_number(raw_number, allow_2, allow_3, allow_4, allow_letters, allow_hyphen);
         if normalized_number.is_empty() {
             continue;
         }
