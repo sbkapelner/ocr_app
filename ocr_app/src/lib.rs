@@ -193,22 +193,54 @@ fn normalize_text(text: &str) -> String {
     normalized_words.join(" ")
 }
 
-/// Helper function to normalize a number by removing special characters and keeping only digits and valid hyphens
+/// Helper function to normalize a number by splitting on special characters and handling hyphens
 pub fn normalize_number(num: &str) -> String {
-    let mut result = String::new();
-    let chars: Vec<char> = num.chars().collect();
-    let len = chars.len();
+    // First split on any non-digit, non-hyphen character
+    let parts: Vec<&str> = num.split(|c: char| !c.is_ascii_digit() && c != '-')
+        .filter(|s| !s.is_empty())
+        .collect();
     
-    for (i, c) in chars.iter().enumerate() {
-        if c.is_ascii_digit() {
-            result.push(*c);
-        } else if *c == '-' && i > 0 && i < len - 1 && 
-                  chars[i-1].is_ascii_digit() && chars[i+1].is_ascii_digit() {
-            // Only keep hyphen if it's between two digits
-            result.push(*c);
+    // Process each part and collect valid numbers
+    let mut numbers = Vec::new();
+    
+    for part in parts {
+        let chars: Vec<char> = part.chars().collect();
+        if chars.is_empty() { continue; }
+        
+        // If it's just digits, add it directly
+        if chars.iter().all(|c| c.is_ascii_digit()) {
+            numbers.push(part.to_string());
+            continue;
+        }
+        
+        // Handle parts with hyphens
+        let len = chars.len();
+        
+        // Case 1: Leading or trailing hyphen (e.g., -30 or 30-)
+        if (chars[0] == '-' && chars[1..].iter().all(|c| c.is_ascii_digit())) ||
+           (chars[len-1] == '-' && chars[..len-1].iter().all(|c| c.is_ascii_digit())) {
+            numbers.push(chars.iter()
+                .filter(|c| c.is_ascii_digit())
+                .collect::<String>());
+            continue;
+        }
+        
+        // Case 2: Hyphen between numbers (e.g., 30-40)
+        let mut current_num = String::new();
+        for (i, c) in chars.iter().enumerate() {
+            if c.is_ascii_digit() {
+                current_num.push(*c);
+            } else if *c == '-' && i > 0 && i < len - 1 &&
+                      chars[i-1].is_ascii_digit() && chars[i+1].is_ascii_digit() {
+                current_num.push(*c);
+            }
+        }
+        if !current_num.is_empty() {
+            numbers.push(current_num);
         }
     }
-    result
+    
+    numbers.join(" ")
 }
 
 pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<DocxResult> {
@@ -267,16 +299,13 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>) -> Result<
     let pattern = Regex::new(r"\b(\w+)\s+([^\s]*[0-9][^\s]*)\b")
         .context("Failed to create regex pattern")?;
 
-    // First normalize all text to handle word variations
-    let text = normalize_text(&text);
-
     // Extract full matches and their numbers
     let mut normalized_matches = HashSet::new();
     let mut numbers = HashSet::new();
     let mut full_matches = Vec::new();
 
     for cap in pattern.captures_iter(&text) {
-        let word = cap.get(1).unwrap().as_str().trim().to_lowercase();
+        let word = normalize_text(cap.get(1).unwrap().as_str().trim());
         let raw_number = cap.get(2).unwrap().as_str().trim();
         
         // Skip if the raw number doesn't contain any digits
