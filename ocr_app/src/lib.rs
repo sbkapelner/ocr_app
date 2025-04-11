@@ -136,29 +136,44 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
             let text = normalize_text(&text);
             // Then if it contains digits, normalize those too
             let text = if text.chars().any(|c| c.is_ascii_digit()) {
-                // Use default label options for OCR processing
-                let label_regex = build_label_regex(true, true, true, true, true);
-                let tokens: Vec<&str> = text.split_whitespace().collect();
+                // First look for FIG patterns
+                let fig_regex = Regex::new(r"\b(FIG\.?)\s*([0-9]+[a-zA-Z]?(?:-[0-9]+)?)\b").unwrap();
                 let mut results = Vec::new();
-                
-                for raw_token in tokens {
-                    let cleaned = clean_token(raw_token);
-                    if cleaned.is_empty() { continue; }
-                    
-                    if label_regex.is_match(&cleaned) {
-                        results.push(cleaned);
-                    } else {
-                        // Try to split merged tokens
-                        let split_parts = split_merged_label(&cleaned, &label_regex);
-                        results.extend(split_parts);
+
+                // Handle FIG patterns first
+                for cap in fig_regex.captures_iter(&text) {
+                    if let Some(number) = cap.get(2) {
+                        results.push(format!("FIG. {}", number.as_str()));
                     }
                 }
-                
-                // Remove duplicates while preserving order
-                let mut seen = HashSet::new();
-                results.retain(|x| seen.insert(x.clone()));
-                
-                results.join(" ")
+
+                // If we found FIG patterns, only use those
+                if !results.is_empty() {
+                    results.join(" ")
+                } else {
+                    // Use default label options for OCR processing
+                    let label_regex = build_label_regex(true, true, true, true, true);
+                    let tokens: Vec<&str> = text.split_whitespace().collect();
+                    
+                    for raw_token in tokens {
+                        let cleaned = clean_token(raw_token);
+                        if cleaned.is_empty() { continue; }
+                        
+                        if label_regex.is_match(&cleaned) {
+                            results.push(cleaned);
+                        } else {
+                            // Try to split merged tokens
+                            let split_parts = split_merged_label(&cleaned, &label_regex);
+                            results.extend(split_parts);
+                        }
+                    }
+                    
+                    // Remove duplicates while preserving order
+                    let mut seen = HashSet::new();
+                    results.retain(|x| seen.insert(x.clone()));
+                    
+                    results.join(" ")
+                }
             } else {
                 text
             };
@@ -282,6 +297,18 @@ pub fn normalize_number(num: &str, allow_2: bool, allow_3: bool, allow_4: bool, 
     // Initialize regex pattern with provided options
     let label_regex = build_label_regex(allow_2, allow_3, allow_4, allow_letters, allow_hyphen);
     
+    // Special handling for FIG. variations
+    let fig_regex = Regex::new(r"(?i)(FIG\.?)\s*([0-9]+[a-zA-Z]?(?:-[0-9]+)?)").unwrap();
+    if let Some(cap) = fig_regex.captures(num) {
+        if let Some(number) = cap.get(2) {
+            let number_str = number.as_str();
+            if label_regex.is_match(number_str) {
+                // Normalize to consistent "FIG. " format
+                return format!("FIG. {}", number_str);
+            }
+        }
+    }
+    
     // Split input on whitespace
     let tokens: Vec<&str> = num.split_whitespace().collect();
     let mut results = Vec::new();
@@ -345,6 +372,18 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
         // Initialize regex pattern with provided options
         let label_regex = build_label_regex(allow_2, allow_3, allow_4, allow_letters, allow_hyphen);
         
+        // Special handling for FIG. variations
+        let fig_regex = Regex::new(r"(?i)(FIG\.?)\s*([0-9]+[a-zA-Z]?(?:-[0-9]+)?)").unwrap();
+        if let Some(cap) = fig_regex.captures(num) {
+            if let Some(number) = cap.get(2) {
+                let number_str = number.as_str();
+                if label_regex.is_match(number_str) {
+                    // Normalize to consistent "FIG. " format
+                    return format!("FIG. {}", number_str);
+                }
+            }
+        }
+        
         // Split input on whitespace
         let tokens: Vec<&str> = num.split_whitespace().collect();
         let mut results = Vec::new();
@@ -369,16 +408,36 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
         results.join(" ")
     }
 
-    // Create regex pattern for words followed by any non-whitespace that contains a number
-    let pattern = Regex::new(r"\b(\w+)\s+([^\s]*[0-9][^\s]*)\b")
-        .context("Failed to create regex pattern")?;
+    // Create regex patterns
+    let word_pattern = Regex::new(r"\b(\w+)\s+([^\s]*[0-9][^\s]*)\b")
+        .context("Failed to create word pattern")?;
+    let fig_pattern = Regex::new(r"\b(FIG\.?)\s*([0-9]+[a-zA-Z]?(?:-[0-9]+)?)\b")
+        .context("Failed to create FIG pattern")?;
 
     // Extract full matches and their numbers
     let mut normalized_matches = HashSet::new();
     let mut numbers = HashSet::new();
     let mut full_matches = Vec::new();
 
-    for cap in pattern.captures_iter(&text) {
+    // Keep track of the last meaningful noun for "and NUMBER" cases
+    let mut last_noun = String::new();
+
+    // First process FIG patterns
+    for cap in fig_pattern.captures_iter(&text) {
+        let raw_number = cap.get(2).unwrap().as_str().trim();
+        let normalized_number = normalize_number(raw_number, allow_2, allow_3, allow_4, allow_letters, allow_hyphen);
+        if !normalized_number.is_empty() {
+            let full_match = format!("FIG. {}", raw_number);
+            let normalized_key = full_match.clone();
+            if normalized_matches.insert(normalized_key) {
+                full_matches.push(full_match);
+                // Store the full FIG. X format in numbers set too
+                numbers.insert(format!("FIG. {}", raw_number));
+            }
+        }
+    }
+    
+    for cap in word_pattern.captures_iter(&text) {
         let word = normalize_text(cap.get(1).unwrap().as_str().trim());
         let raw_number = cap.get(2).unwrap().as_str().trim();
         
@@ -387,15 +446,29 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
             continue;
         }
         
+        // Skip unwanted prefixes
+        if word.eq_ignore_ascii_case("about") || word.eq_ignore_ascii_case("of") {
+            continue;
+        }
+        
         let normalized_number = normalize_number(raw_number, allow_2, allow_3, allow_4, allow_letters, allow_hyphen);
         if normalized_number.is_empty() {
             continue;
         }
         
-        let full_match = cap.get(0).unwrap().as_str().trim().to_string();
+        let mut full_match = cap.get(0).unwrap().as_str().trim().to_string();
+        
+        // Handle "and NUMBER" and "or NUMBER" cases
+        let is_conjunction = word.eq_ignore_ascii_case("and") || word.eq_ignore_ascii_case("or");
+        if is_conjunction && !last_noun.is_empty() {
+            full_match = format!("{} {}", last_noun, raw_number);
+        } else if !is_conjunction {
+            // Update last noun for next iteration
+            last_noun = word.clone();
+        }
         
         // Create a normalized key for deduplication
-        let normalized_key = format!("{} {}", word, normalized_number);
+        let normalized_key = format!("{} {}", if is_conjunction { &last_noun } else { &word }, normalized_number);
         
         // Only add if we haven't seen this normalized match before
         if normalized_matches.insert(normalized_key) {
@@ -414,11 +487,11 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
         match a_word.cmp(&b_word) {
             std::cmp::Ordering::Equal => {
                 // If words are the same, compare numbers
-                let a_num = pattern.captures(a)
+                let a_num = word_pattern.captures(a)
                     .and_then(|cap| cap.get(1))
                     .map(|m| m.as_str())
                     .unwrap_or("");
-                let b_num = pattern.captures(b)
+                let b_num = word_pattern.captures(b)
                     .and_then(|cap| cap.get(1))
                     .map(|m| m.as_str())
                     .unwrap_or("");
