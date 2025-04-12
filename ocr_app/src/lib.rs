@@ -214,8 +214,8 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
                     max_y / height as f32
                 );
                 
-                // Only create result if we found patterns
-                if !normalized_line.is_empty() {
+                // Only create result if it matches our label patterns
+                if !normalized_line.is_empty() && is_valid_label(&normalized_line) {
                     ocr_results.push(OcrResult {
                         text: normalized_line.clone(),
                         bbox: [
@@ -346,6 +346,48 @@ fn split_merged_label(token: &str, label_regex: &Regex) -> Vec<String> {
     }
     
     results
+}
+
+/// Returns true if the text matches one of our label patterns after stripping punctuation
+fn is_valid_label(text: &str) -> bool {
+    // Always allow FIG references
+    if text.to_uppercase().contains("FIG") {
+        return true;
+    }
+
+    // Strip leading/trailing punctuation
+    let clean_text: String = text.trim_matches(|c: char| !c.is_alphanumeric()).to_string();
+    
+    // Must have at least one digit
+    if !clean_text.chars().any(|c| c.is_ascii_digit()) {
+        return false;
+    }
+
+    // Check patterns:
+    // 1. Three digits (e.g., "130")
+    // 2. Two digits (e.g., "13")
+    // 3. Three digits + letter (e.g., "130a")
+    // 4. Two digits + letter (e.g., "13a")
+    // 5. Three digits + dash + digits (e.g., "130-1")
+    
+    let is_three_digits = clean_text.len() == 3 && clean_text.chars().all(|c| c.is_ascii_digit());
+    let is_two_digits = clean_text.len() == 2 && clean_text.chars().all(|c| c.is_ascii_digit());
+    let is_three_digits_letter = clean_text.len() == 4 
+        && clean_text[..3].chars().all(|c| c.is_ascii_digit())
+        && clean_text[3..].chars().all(|c| c.is_ascii_lowercase());
+    let is_two_digits_letter = clean_text.len() == 3
+        && clean_text[..2].chars().all(|c| c.is_ascii_digit())
+        && clean_text[2..].chars().all(|c| c.is_ascii_lowercase());
+    let is_three_digits_dash = {
+        let parts: Vec<&str> = clean_text.split('-').collect();
+        parts.len() == 2 
+            && parts[0].len() == 3 
+            && parts[0].chars().all(|c| c.is_ascii_digit())
+            && parts[1].chars().all(|c| c.is_ascii_digit())
+            && !parts[1].is_empty()
+    };
+
+    is_three_digits || is_two_digits || is_three_digits_letter || is_two_digits_letter || is_three_digits_dash
 }
 
 /// Helper function to normalize a number by applying label rules
