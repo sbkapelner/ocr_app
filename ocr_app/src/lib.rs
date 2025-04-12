@@ -216,10 +216,8 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
                 
                 // Only create result if we found patterns
                 if !normalized_line.is_empty() {
-                    // Clean the text for display by removing leading/trailing punctuation
-                    let display_text = clean_display_text(&normalized_line);
                     ocr_results.push(OcrResult {
-                        text: display_text,
+                        text: normalized_line.clone(),
                         bbox: [
                             min_x / width as f32,   // Normalize coordinates
                             min_y / height as f32,
@@ -232,12 +230,6 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
         }
     }
     Ok(ocr_results)
-}
-
-/// Clean text by removing leading and trailing punctuation
-fn clean_display_text(text: &str) -> String {
-    text.trim_matches(|c: char| !c.is_alphanumeric())
-        .to_string()
 }
 
 /// Helper function to normalize text by converting plurals to singular form
@@ -298,20 +290,35 @@ fn normalize_text(text: &str) -> String {
 }
 
 /// Build a regex pattern for matching valid label numbers
-fn build_label_regex(_allow_2: bool, _allow_3: bool, _allow_4: bool, _allow_letters: bool, _allow_hyphen: bool) -> Regex {
+fn build_label_regex(allow_2: bool, allow_3: bool, allow_4: bool, allow_letters: bool, allow_hyphen: bool) -> Regex {
     let mut patterns = Vec::new();
     
-    // Only accept 2-4 digit numbers
-    patterns.push(r"\d{2,4}");
+    if allow_2 {
+        patterns.push(r"\d{2}");
+        if allow_letters {
+            patterns.push(r"\d{2}[a-zA-Z]");
+        }
+    }
+    if allow_3 {
+        patterns.push(r"\d{3}");
+        if allow_letters {
+            patterns.push(r"\d{3}[a-zA-Z]");
+        }
+        if allow_hyphen {
+            patterns.push(r"\d{3}-\d");
+        }
+    }
+    if allow_4 {
+        patterns.push(r"\d{4}");
+        if allow_letters {
+            patterns.push(r"\d{4}[a-zA-Z]");
+        }
+        if allow_hyphen {
+            patterns.push(r"\d{4}-\d");
+        }
+    }
     
-    // Allow a single letter after the number
-    patterns.push(r"\d{2,4}[A-Za-z]");
-    
-    // Allow hyphenated numbers (e.g., 123-4)
-    patterns.push(r"\d{2,4}-\d{1,4}");
-    patterns.push(r"\d{2,4}-\d{1,4}[A-Za-z]");
-    
-    Regex::new(&format!(r"^(?:{})$", patterns.join("|"))).unwrap()
+    Regex::new(&format!(r"({})", patterns.join("|"))).unwrap()
 }
 
 /// Clean a token by removing all non-word and non-hyphen characters
@@ -497,11 +504,24 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
             last_noun = word.clone();
         }
         
-        // Create a normalized key for deduplication
-        let normalized_key = format!("{} {}", if is_conjunction { &last_noun } else { &word }, normalized_number);
+        // Check if we've seen a similar word with the same number
+        let current_word = if is_conjunction { &last_noun } else { &word };
+        let mut found_similar = false;
         
-        // Only add if we haven't seen this normalized match before
-        if normalized_matches.insert(normalized_key) {
+        // Compare with existing matches
+        for existing_match in &full_matches {
+            if let Some(existing_word) = existing_match.split_whitespace().next() {
+                // If the words are similar (one is a prefix of the other) and have the same number
+                if (existing_word.starts_with(current_word) || current_word.starts_with(existing_word)) 
+                   && existing_match.split_whitespace().nth(1) == Some(raw_number) {
+                    found_similar = true;
+                    break;
+                }
+            }
+        }
+        
+        // Only add if we haven't seen a similar match before
+        if !found_similar {
             full_matches.push(full_match);
             numbers.insert(normalized_number);
         }
