@@ -120,9 +120,21 @@
         const pdfTable = document.getElementById('pdf-numbers');
         uniquePdfNumbers.forEach(number => {
             const row = document.createElement('tr');
-            // For PDF numbers, extract just the number part if it's not a FIG reference
-            const numOnly = !number.toLowerCase().startsWith('fig') ? (number.match(/\b\d+[a-zA-Z]?\b/) || [number])[0] : number;
-            const isChecked = savedState[stateKey]?.pdf?.[number] ?? docxNumbers.includes(numOnly);
+            // Normalize FIG references for comparison
+            let numForComparison = number;
+            if (number.toLowerCase().startsWith('fig')) {
+                // Convert to lowercase and remove spaces and periods
+                numForComparison = number.toLowerCase().replace(/\s+|\.+/g, '');
+            } else {
+                // For non-FIG references, just get the number part
+                numForComparison = (number.match(/\b\d+[a-zA-Z]?\b/) || [number])[0];
+            }
+            const isChecked = savedState[stateKey]?.pdf?.[number] ?? docxNumbers.some(docxNum => {
+                if (docxNum.toLowerCase().startsWith('fig')) {
+                    return docxNum.toLowerCase().replace(/\s+|\.+/g, '') === numForComparison;
+                }
+                return docxNum === numForComparison;
+            });
             row.innerHTML = `
                 <td>${number}</td>
                 <td><input type="checkbox" class="pdf-checkbox" data-number="${number}" ${isChecked ? 'checked' : ''}></td>
@@ -148,31 +160,45 @@
             return true;
         });
 
-        // Second pass: build number to matches map
+        // Second pass: build number to matches map using normalized comparison
         normalizedMatches.forEach(item => {
-            const docxNumMatch = item.original.match(/\b\d+[a-zA-Z]?\b/);
-            const docxNumOnly = docxNumMatch ? docxNumMatch[0] : item.number;
-            if (!numberToMatches.has(docxNumOnly)) {
-                numberToMatches.set(docxNumOnly, []);
+            let docxNumForComparison = item.original;
+            if (item.original.toLowerCase().startsWith('fig')) {
+                docxNumForComparison = item.original.toLowerCase().replace(/\s+|\.+/g, '');
+            } else {
+                const docxNumMatch = item.original.match(/\b\d+[a-zA-Z]?\b/);
+                docxNumForComparison = docxNumMatch ? docxNumMatch[0] : item.number;
             }
-            numberToMatches.get(docxNumOnly).push(item.original);
+            if (!numberToMatches.has(docxNumForComparison)) {
+                numberToMatches.set(docxNumForComparison, []);
+            }
+            numberToMatches.get(docxNumForComparison).push(item.original);
         });
 
         // Populate DOCX table
         const docxTable = document.getElementById('docx-numbers');
         normalizedMatches.forEach(item => {
             const row = document.createElement('tr');
-            const docxNumMatch = item.original.match(/\b\d+[a-zA-Z]?\b/);
-            const docxNumOnly = docxNumMatch ? docxNumMatch[0] : item.number;
+            let docxNumForComparison = item.original;
+            if (item.original.toLowerCase().startsWith('fig')) {
+                // Convert to lowercase and remove spaces and periods
+                docxNumForComparison = item.original.toLowerCase().replace(/\s+|\.+/g, '');
+            } else {
+                // For non-FIG references, just get the number part
+                const docxNumMatch = item.original.match(/\b\d+[a-zA-Z]?\b/);
+                docxNumForComparison = docxNumMatch ? docxNumMatch[0] : item.number;
+            }
             const isChecked = savedState[stateKey]?.docx?.[item.original] ?? uniquePdfNumbers.some(pdfNum => {
-                if (pdfNum.toLowerCase().startsWith('fig')) return false;
+                if (pdfNum.toLowerCase().startsWith('fig')) {
+                    return pdfNum.toLowerCase().replace(/\s+|\.+/g, '') === docxNumForComparison;
+                }
                 const pdfNumMatch = pdfNum.match(/\b\d+[a-zA-Z]?\b/);
-                return pdfNumMatch && pdfNumMatch[0] === docxNumOnly;
+                return pdfNumMatch && pdfNumMatch[0] === docxNumForComparison;
             });
 
             // If this number appears in multiple entries and is not a FIG reference, show in red
-            const duplicateEntries = numberToMatches.get(docxNumOnly);
-            const isDuplicate = duplicateEntries.length > 1 && !item.original.toLowerCase().includes('fig');
+            const duplicateEntries = numberToMatches.get(docxNumForComparison);
+            const isDuplicate = duplicateEntries && duplicateEntries.length > 1 && !item.original.toLowerCase().includes('fig');
             const style = isDuplicate ? 'color: #dc3545;' : '';
             row.innerHTML = `
                 <td style="${style}" title="${isDuplicate ? 'Also appears in: ' + duplicateEntries.filter(m => m !== item.original).join(', ') : ''}">${item.original}</td>
