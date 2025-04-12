@@ -216,8 +216,10 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
                 
                 // Only create result if we found patterns
                 if !normalized_line.is_empty() {
+                    // Clean the text for display by removing leading/trailing punctuation
+                    let display_text = clean_display_text(&normalized_line);
                     ocr_results.push(OcrResult {
-                        text: normalized_line.clone(),
+                        text: display_text,
                         bbox: [
                             min_x / width as f32,   // Normalize coordinates
                             min_y / height as f32,
@@ -230,6 +232,12 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
         }
     }
     Ok(ocr_results)
+}
+
+/// Clean text by removing leading and trailing punctuation
+fn clean_display_text(text: &str) -> String {
+    text.trim_matches(|c: char| !c.is_alphanumeric())
+        .to_string()
 }
 
 /// Helper function to normalize text by converting plurals to singular form
@@ -290,35 +298,20 @@ fn normalize_text(text: &str) -> String {
 }
 
 /// Build a regex pattern for matching valid label numbers
-fn build_label_regex(allow_2: bool, allow_3: bool, allow_4: bool, allow_letters: bool, allow_hyphen: bool) -> Regex {
+fn build_label_regex(_allow_2: bool, _allow_3: bool, _allow_4: bool, _allow_letters: bool, _allow_hyphen: bool) -> Regex {
     let mut patterns = Vec::new();
     
-    if allow_2 {
-        patterns.push(r"\d{2}");
-        if allow_letters {
-            patterns.push(r"\d{2}[a-zA-Z]");
-        }
-    }
-    if allow_3 {
-        patterns.push(r"\d{3}");
-        if allow_letters {
-            patterns.push(r"\d{3}[a-zA-Z]");
-        }
-        if allow_hyphen {
-            patterns.push(r"\d{3}-\d");
-        }
-    }
-    if allow_4 {
-        patterns.push(r"\d{4}");
-        if allow_letters {
-            patterns.push(r"\d{4}[a-zA-Z]");
-        }
-        if allow_hyphen {
-            patterns.push(r"\d{4}-\d");
-        }
-    }
+    // Only accept 1-4 digit numbers
+    patterns.push(r"\d{1,4}");
     
-    Regex::new(&format!(r"({})", patterns.join("|"))).unwrap()
+    // Allow a single letter after the number
+    patterns.push(r"\d{1,4}[A-Za-z]");
+    
+    // Allow hyphenated numbers (e.g., 123-4)
+    patterns.push(r"\d{1,4}-\d{1,4}");
+    patterns.push(r"\d{1,4}-\d{1,4}[A-Za-z]");
+    
+    Regex::new(&format!(r"^(?:{})$", patterns.join("|"))).unwrap()
 }
 
 /// Clean a token by removing all non-word and non-hyphen characters

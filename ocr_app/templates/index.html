@@ -230,13 +230,15 @@
                     }
                     // Process other numbers
                     text.split(' ').forEach(part => {
-                        const trimmed = part.trim();
-                        if (trimmed && /\b\d+[a-zA-Z]?\b|\b\d+-\d+[a-zA-Z]?\b/.test(trimmed) && !/^FIG/i.test(trimmed)) {
-                            numbers.add(trimmed);
-                            if (!numberBoxes.has(trimmed)) {
-                                numberBoxes.set(trimmed, []);
+                        // Clean the text by removing leading/trailing punctuation
+                        const cleaned = part.trim().replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '');
+                        // Only accept 1-4 digit numbers optionally followed by a single letter, or two numbers separated by a hyphen
+                        if (cleaned && /^\d{1,4}[A-Za-z]?$|^\d{1,4}-\d{1,4}[A-Za-z]?$/.test(cleaned) && !/^FIG/i.test(cleaned)) {
+                            numbers.add(cleaned);
+                            if (!numberBoxes.has(cleaned)) {
+                                numberBoxes.set(cleaned, []);
                             }
-                            numberBoxes.get(trimmed).push({
+                            numberBoxes.get(cleaned).push({
                                 pageIndex,
                                 bbox: result.bbox
                             });
