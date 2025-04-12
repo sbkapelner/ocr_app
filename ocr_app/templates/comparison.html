@@ -170,9 +170,9 @@
                 return pdfNumMatch && pdfNumMatch[0] === docxNumOnly;
             });
 
-            // If this number appears in multiple entries, show all entries in red
+            // If this number appears in multiple entries and is not a FIG reference, show in red
             const duplicateEntries = numberToMatches.get(docxNumOnly);
-            const isDuplicate = duplicateEntries.length > 1;
+            const isDuplicate = duplicateEntries.length > 1 && !item.original.toLowerCase().includes('fig');
             const style = isDuplicate ? 'color: #dc3545;' : '';
             row.innerHTML = `
                 <td style="${style}" title="${isDuplicate ? 'Also appears in: ' + duplicateEntries.filter(m => m !== item.original).join(', ') : ''}">${item.original}</td>
