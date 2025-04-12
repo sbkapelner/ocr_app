@@ -512,8 +512,9 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
             last_noun = word.clone();
         }
         
-        // Create a normalized key for deduplication
-        let normalized_key = format!("{} {}", if is_conjunction { &last_noun } else { &word }, normalized_number);
+        // Create a normalized key for deduplication using normalized word
+        let normalized_word = normalize_text(if is_conjunction { &last_noun } else { &word });
+        let normalized_key = format!("{} {}", normalized_word, normalized_number);
         
         // Only add if we haven't seen this normalized match before
         if normalized_matches.insert(normalized_key) {
