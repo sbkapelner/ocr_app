@@ -113,85 +113,90 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
     // Convert results to our format with bounding boxes
     let mut ocr_results = Vec::new();
     let (width, height) = img.dimensions();
-    for (rects, texts) in line_rects.iter().zip(line_texts.iter()) {
-        if let Some(text) = texts {
-            // Get the bounding box that encompasses all rectangles in the line
-            let mut min_x = f32::MAX;
-            let mut min_y = f32::MAX;
-            let mut max_x = f32::MIN;
-            let mut max_y = f32::MIN;
-
-            for rect in rects {
+    
+    // Process each line and its words
+    for (line_rects, line_text) in line_rects.iter().zip(line_texts.iter()) {
+        if let Some(text) = line_text {
+            // First normalize the full line text for pattern matching
+            let line_text = text.to_string();
+            let normalized_line = normalize_text(&line_text);
+            
+            // Process each word in the line
+            for rect in line_rects {
+                // Get the bounding box for this word
                 let corners = rect.corners();
+                let mut min_x = f32::MAX;
+                let mut min_y = f32::MAX;
+                let mut max_x = f32::MIN;
+                let mut max_y = f32::MIN;
+                
                 for corner in corners {
                     min_x = min_x.min(corner.x);
                     min_y = min_y.min(corner.y);
                     max_x = max_x.max(corner.x);
                     max_y = max_y.max(corner.y);
                 }
-            }
 
-            let text = text.to_string();
-            // First normalize the text to handle word variations
-            let text = normalize_text(&text);
-            // Then if it contains digits, normalize those too
-            let text = if text.chars().any(|c| c.is_ascii_digit()) {
-                // First look for FIG patterns
-                let fig_regex = Regex::new(r"(?i)\b(FIG\.?)\s*([0-9]+[a-zA-Z]?(?:-[0-9]+)?)\b").unwrap();
-                let mut results = Vec::new();
+                // Use the normalized line text for pattern matching
+                if normalized_line.chars().any(|c| c.is_ascii_digit()) {
+                    // First look for FIG patterns in the line
+                    let fig_regex = Regex::new(r"(?i)\b(FIG\.?)\s*([0-9]+[a-zA-Z]?(?:-[0-9]+)?)\b").unwrap();
+                    let mut results = Vec::new();
 
-                // Handle FIG patterns first - don't validate numbers in FIG references
-                for cap in fig_regex.captures_iter(&text) {
-                    if let Some(number) = cap.get(2) {
-                        results.push(format!("FIG. {}", number.as_str()));
-                    }
-                }
-
-                // If we found FIG patterns, only use those
-                if !results.is_empty() {
-                    // Remove duplicates while preserving order
-                    let mut seen = HashSet::new();
-                    results.retain(|x| seen.insert(x.clone()));
-                    println!("[DEBUG] PDF numbers found: {:?}", results);
-                    results.join(" ")
-                } else {
-                    // Use default label options for OCR processing
-                    let label_regex = build_label_regex(true, true, true, true, true);
-                    let tokens: Vec<&str> = text.split_whitespace().collect();
-                    
-                    for raw_token in tokens {
-                        let cleaned = clean_token(raw_token);
-                        if cleaned.is_empty() { continue; }
-                        
-                        if label_regex.is_match(&cleaned) {
-                            results.push(cleaned);
-                        } else {
-                            // Try to split merged tokens
-                            let split_parts = split_merged_label(&cleaned, &label_regex);
-                            results.extend(split_parts);
+                    // Handle FIG patterns first
+                    for cap in fig_regex.captures_iter(&normalized_line) {
+                        if let Some(number) = cap.get(2) {
+                            results.push(format!("FIG. {}", number.as_str()));
                         }
                     }
-                    
-                    // Remove duplicates while preserving order
-                    let mut seen = HashSet::new();
-                    results.retain(|x| seen.insert(x.clone()));
-                    println!("[DEBUG] PDF numbers found: {:?}", results);
-                    results.join(" ")
+
+                    // If we found FIG patterns, use those
+                    if !results.is_empty() {
+                        // Remove duplicates while preserving order
+                        let mut seen = HashSet::new();
+                        results.retain(|x| seen.insert(x.clone()));
+                        println!("[DEBUG] PDF numbers found: {:?}", results);
+                        results.join(" ")
+                    } else {
+                        // Use default label options for OCR processing
+                        let label_regex = build_label_regex(true, true, true, true, true);
+                        let tokens: Vec<&str> = normalized_line.split_whitespace().collect();
+                        
+                        for raw_token in tokens {
+                            let cleaned = clean_token(raw_token);
+                            if cleaned.is_empty() { continue; }
+                            
+                            if label_regex.is_match(&cleaned) {
+                                results.push(cleaned);
+                            } else {
+                                // Try to split merged tokens
+                                let split_parts = split_merged_label(&cleaned, &label_regex);
+                                results.extend(split_parts);
+                            }
+                        }
+                        
+                        // Remove duplicates while preserving order
+                        let mut seen = HashSet::new();
+                        results.retain(|x| seen.insert(x.clone()));
+                        println!("[DEBUG] PDF numbers found: {:?}", results);
+                        results.join(" ")
+                    }
+                } else {
+                    normalized_line.clone()
+                };
+                
+                // Only create result if we found patterns
+                if !normalized_line.is_empty() {
+                    ocr_results.push(OcrResult {
+                        text: normalized_line.clone(),
+                        bbox: [
+                            min_x / width as f32,   // Normalize coordinates
+                            min_y / height as f32,
+                            max_x / width as f32,
+                            max_y / height as f32,
+                        ],
+                    });
                 }
-            } else {
-                text
-            };
-            
-            if !text.is_empty() {
-                ocr_results.push(OcrResult {
-                    text,
-                    bbox: [
-                        min_x / width as f32,   // Normalize coordinates
-                        min_y / height as f32,
-                        max_x / width as f32,
-                        max_y / height as f32,
-                    ],
-                });
             }
         }
     }
