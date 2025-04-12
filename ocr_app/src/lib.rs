@@ -137,10 +137,10 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
             // Then if it contains digits, normalize those too
             let text = if text.chars().any(|c| c.is_ascii_digit()) {
                 // First look for FIG patterns
-                let fig_regex = Regex::new(r"\b(FIG\.?)\s*([0-9]+[a-zA-Z]?(?:-[0-9]+)?)\b").unwrap();
+                let fig_regex = Regex::new(r"(?i)\b(FIG\.?)\s*([0-9]+[a-zA-Z]?(?:-[0-9]+)?)\b").unwrap();
                 let mut results = Vec::new();
 
-                // Handle FIG patterns first
+                // Handle FIG patterns first - don't validate numbers in FIG references
                 for cap in fig_regex.captures_iter(&text) {
                     if let Some(number) = cap.get(2) {
                         results.push(format!("FIG. {}", number.as_str()));
@@ -149,6 +149,10 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
 
                 // If we found FIG patterns, only use those
                 if !results.is_empty() {
+                    // Remove duplicates while preserving order
+                    let mut seen = HashSet::new();
+                    results.retain(|x| seen.insert(x.clone()));
+                    println!("[DEBUG] PDF numbers found: {:?}", results);
                     results.join(" ")
                 } else {
                     // Use default label options for OCR processing
@@ -171,7 +175,7 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
                     // Remove duplicates while preserving order
                     let mut seen = HashSet::new();
                     results.retain(|x| seen.insert(x.clone()));
-                    
+                    println!("[DEBUG] PDF numbers found: {:?}", results);
                     results.join(" ")
                 }
             } else {
@@ -411,7 +415,7 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
     // Create regex patterns
     let word_pattern = Regex::new(r"\b(\w+)\s+([^\s]*[0-9][^\s]*)\b")
         .context("Failed to create word pattern")?;
-    let fig_pattern = Regex::new(r"\b(FIG\.?)\s*([0-9]+[a-zA-Z]?(?:-[0-9]+)?)\b")
+    let fig_pattern = Regex::new(r"(?i)\b(FIG\.?)\s*([0-9]+[a-zA-Z]?(?:-[0-9]+)?)\b")
         .context("Failed to create FIG pattern")?;
 
     // Extract full matches and their numbers
@@ -422,18 +426,15 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
     // Keep track of the last meaningful noun for "and NUMBER" cases
     let mut last_noun = String::new();
 
-    // First process FIG patterns
+    // First process FIG patterns - don't validate numbers in FIG references
     for cap in fig_pattern.captures_iter(&text) {
         let raw_number = cap.get(2).unwrap().as_str().trim();
-        let normalized_number = normalize_number(raw_number, allow_2, allow_3, allow_4, allow_letters, allow_hyphen);
-        if !normalized_number.is_empty() {
-            let full_match = format!("FIG. {}", raw_number);
-            let normalized_key = full_match.clone();
-            if normalized_matches.insert(normalized_key) {
-                full_matches.push(full_match);
-                // Store the full FIG. X format in numbers set too
-                numbers.insert(format!("FIG. {}", raw_number));
-            }
+        let full_match = format!("FIG. {}", raw_number);
+        let normalized_key = full_match.clone();
+        if normalized_matches.insert(normalized_key) {
+            full_matches.push(full_match);
+            // Store the full FIG. X format in numbers set too
+            numbers.insert(format!("FIG. {}", raw_number));
         }
     }
     
@@ -508,6 +509,9 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
         }
     });
 
+    println!("[DEBUG] DOCX full_matches before sort: {:?}", full_matches);
+    println!("[DEBUG] DOCX numbers before sort: {:?}", numbers);
+
     // Convert numbers set to sorted vector
     let mut numbers_vec: Vec<String> = numbers.into_iter().collect();
     numbers_vec.sort_by(|a, b| {
@@ -519,6 +523,12 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
             _ => a.cmp(b)
         }
     });
+
+    println!("[DEBUG] DOCX full_matches: {:?}", full_matches);
+    println!("[DEBUG] DOCX numbers: {:?}", numbers_vec);
+
+    println!("[DEBUG] DOCX final full_matches after sort: {:?}", full_matches);
+    println!("[DEBUG] DOCX final numbers after sort: {:?}", numbers_vec);
 
     Ok(DocxResult {
         full_matches,
