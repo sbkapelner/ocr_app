@@ -483,8 +483,11 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
             continue;
         }
         
-        // Skip unwanted prefixes and FIG references
-        if word.eq_ignore_ascii_case("about") || word.eq_ignore_ascii_case("of") || word.eq_ignore_ascii_case("fig") || word.eq_ignore_ascii_case("figure") {
+        // Skip unwanted words and patterns
+        let skip_words = [
+            "about", "of", "fig", "figure", "to", "than", "as", "the"
+        ];
+        if skip_words.iter().any(|&w| word.eq_ignore_ascii_case(w)) {
             continue;
         }
         
@@ -511,9 +514,14 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
         // Compare with existing matches
         for existing_match in &full_matches {
             if let Some(existing_word) = existing_match.split_whitespace().next() {
+                // Normalize whitespace for number comparison
+                let existing_number = existing_match.split_whitespace().nth(1)
+                    .map(|n| n.trim().replace(" ", ""));
+                let current_number = raw_number.trim().replace(" ", "");
+                
                 // If the words are similar (one is a prefix of the other) and have the same number
                 if (existing_word.starts_with(current_word) || current_word.starts_with(existing_word)) 
-                   && existing_match.split_whitespace().nth(1) == Some(raw_number) {
+                   && existing_number.as_deref() == Some(&current_number) {
                     found_similar = true;
                     break;
                 }
