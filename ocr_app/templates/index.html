@@ -232,8 +232,8 @@
                     text.split(' ').forEach(part => {
                         // Clean the text by removing leading/trailing punctuation
                         const cleaned = part.trim().replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '');
-                        // Only accept 1-4 digit numbers optionally followed by a single letter, or two numbers separated by a hyphen
-                        if (cleaned && /^\d{1,4}[A-Za-z]?$|^\d{1,4}-\d{1,4}[A-Za-z]?$/.test(cleaned) && !/^FIG/i.test(cleaned)) {
+                        // Only accept 2-4 digit numbers optionally followed by a single letter, or two numbers separated by a hyphen
+                        if (cleaned && /^\d{2,4}[A-Za-z]?$|^\d{2,4}-\d{1,4}[A-Za-z]?$/.test(cleaned) && !/^FIG/i.test(cleaned)) {
                             numbers.add(cleaned);
                             if (!numberBoxes.has(cleaned)) {
                                 numberBoxes.set(cleaned, []);

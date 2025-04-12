@@ -301,15 +301,15 @@ fn normalize_text(text: &str) -> String {
 fn build_label_regex(_allow_2: bool, _allow_3: bool, _allow_4: bool, _allow_letters: bool, _allow_hyphen: bool) -> Regex {
     let mut patterns = Vec::new();
     
-    // Only accept 1-4 digit numbers
-    patterns.push(r"\d{1,4}");
+    // Only accept 2-4 digit numbers
+    patterns.push(r"\d{2,4}");
     
     // Allow a single letter after the number
-    patterns.push(r"\d{1,4}[A-Za-z]");
+    patterns.push(r"\d{2,4}[A-Za-z]");
     
     // Allow hyphenated numbers (e.g., 123-4)
-    patterns.push(r"\d{1,4}-\d{1,4}");
-    patterns.push(r"\d{1,4}-\d{1,4}[A-Za-z]");
+    patterns.push(r"\d{2,4}-\d{1,4}");
+    patterns.push(r"\d{2,4}-\d{1,4}[A-Za-z]");
     
     Regex::new(&format!(r"^(?:{})$", patterns.join("|"))).unwrap()
 }
