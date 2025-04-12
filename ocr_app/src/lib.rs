@@ -151,9 +151,11 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
                     // Handle explicit FIG patterns first
                     for cap in fig_regex.captures_iter(&normalized_line) {
                         if let Some(number) = cap.get(2) {
-                            let num_part = number.as_str().to_uppercase();
-                            if num_part.contains(|c: char| c >= 'A' && c <= 'Z') {
-                                results.push(format!("FIG.{}", num_part));
+                            let num_part = number.as_str();
+                            if num_part.to_uppercase().contains(|c: char| c >= 'A' && c <= 'Z') {
+                                // Get the original FIG prefix from the capture
+                                let fig_prefix = cap.get(1).map(|m| m.as_str()).unwrap_or("FIG.");
+                                results.push(format!("{}{}", fig_prefix, num_part));
                             }
                         }
                     }
@@ -236,8 +238,8 @@ fn normalize_text(text: &str) -> String {
     let fig_regex = Regex::new(FIG_PATTERN).unwrap();
     if let Some(cap) = fig_regex.captures(text) {
         if let Some(number) = cap.get(2) {
-            let num_part = number.as_str().to_uppercase();
-            if num_part.contains('A') || num_part.contains('B') || num_part.contains('C') || num_part.contains('D') {
+            let num_part = number.as_str();
+            if num_part.to_uppercase().contains(|c: char| c >= 'A' && c <= 'Z') {
                 return format!("FIG.{}", num_part);
             }
         }
@@ -277,7 +279,14 @@ fn normalize_text(text: &str) -> String {
         })
         .collect();
     
-    normalized_words.join(" ")
+    let result = normalized_words.join(" ");
+    // Convert 'fig' back to 'FIG'
+    // Convert all variants of 'fig' to 'FIG'
+    result.replace("fig.", "FIG.")
+         .replace("fig ", "FIG ")
+         .replace("fig
+", "FIG
+")
 }
 
 /// Build a regex pattern for matching valid label numbers
