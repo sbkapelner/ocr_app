@@ -483,11 +483,16 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
             continue;
         }
         
-        // Skip unwanted words and patterns
-        let skip_words = [
-            "about", "of", "fig", "figure", "to", "than", "as", "the"
-        ];
-        if skip_words.iter().any(|&w| word.eq_ignore_ascii_case(w)) {
+        // Skip unwanted patterns
+        if word.eq_ignore_ascii_case("to") ||
+           word.eq_ignore_ascii_case("than") ||
+           word.eq_ignore_ascii_case("as") ||
+           word.eq_ignore_ascii_case("the") {
+            continue;
+        }
+        
+        // Skip unwanted prefixes and FIG references
+        if word.eq_ignore_ascii_case("about") || word.eq_ignore_ascii_case("of") || word.eq_ignore_ascii_case("fig") || word.eq_ignore_ascii_case("figure") {
             continue;
         }
         
@@ -507,29 +512,11 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
             last_noun = word.clone();
         }
         
-        // Check if we've seen a similar word with the same number
-        let current_word = if is_conjunction { &last_noun } else { &word };
-        let mut found_similar = false;
+        // Create a normalized key for deduplication
+        let normalized_key = format!("{} {}", if is_conjunction { &last_noun } else { &word }, normalized_number);
         
-        // Compare with existing matches
-        for existing_match in &full_matches {
-            if let Some(existing_word) = existing_match.split_whitespace().next() {
-                // Normalize whitespace for number comparison
-                let existing_number = existing_match.split_whitespace().nth(1)
-                    .map(|n| n.trim().replace(" ", ""));
-                let current_number = raw_number.trim().replace(" ", "");
-                
-                // If the words are similar (one is a prefix of the other) and have the same number
-                if (existing_word.starts_with(current_word) || current_word.starts_with(existing_word)) 
-                   && existing_number.as_deref() == Some(&current_number) {
-                    found_similar = true;
-                    break;
-                }
-            }
-        }
-        
-        // Only add if we haven't seen a similar match before
-        if !found_similar {
+        // Only add if we haven't seen this normalized match before
+        if normalized_matches.insert(normalized_key) {
             full_matches.push(full_match);
             numbers.insert(normalized_number);
         }
