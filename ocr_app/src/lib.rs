@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate lazy_static;
 
 use std::path::Path;
@@ -119,6 +118,7 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
         if let Some(text) = line_text {
             // First normalize the full line text for pattern matching
             let line_text = text.to_string();
+            println!("[DEBUG] Raw OCR text: {}", line_text);
             let normalized_line = normalize_text(&line_text);
             
             // Process each word in the line
@@ -140,13 +140,28 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
                 // Use the normalized line text for pattern matching
                 if normalized_line.chars().any(|c| c.is_ascii_digit()) {
                     // First look for FIG patterns in the line
-                    let fig_regex = Regex::new(r"(?i)\b(FIG\.?)\s*([0-9]+[a-zA-Z]?(?:-[0-9]+)?)\b").unwrap();
+                    let fig_regex = Regex::new(r"(?i)\b(FIG\.?|F\.?|[F]IG\.?)\s*([0-9]+[A-Z]?)\b").unwrap();
+                    // Also look for standalone number-letter combinations that might be figure references
+                    let standalone_ref_regex = Regex::new(r"\b([0-9]+[A-Z])\b").unwrap();
                     let mut results = Vec::new();
 
-                    // Handle FIG patterns first
+                    // Handle explicit FIG patterns first
                     for cap in fig_regex.captures_iter(&normalized_line) {
                         if let Some(number) = cap.get(2) {
-                            results.push(format!("FIG. {}", number.as_str()));
+                            let num_part = number.as_str().to_uppercase();
+                            if num_part.contains(|c: char| c >= 'A' && c <= 'Z') {
+                                results.push(format!("FIG.{}", num_part));
+                            }
+                        }
+                    }
+
+                    // If no explicit FIG patterns found, look for standalone number-letter combinations
+                    if results.is_empty() {
+                        for cap in standalone_ref_regex.captures_iter(&normalized_line) {
+                            if let Some(number) = cap.get(1) {
+                                let num_part = number.as_str().to_uppercase();
+                                results.push(format!("FIG.{}", num_part));
+                            }
                         }
                     }
 
@@ -185,6 +200,15 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
                     normalized_line.clone()
                 };
                 
+                // Log the exact text and its bounding box for debugging
+                println!("[DEBUG] Bounding box text: '{}' at coordinates: [{:.3}, {:.3}, {:.3}, {:.3}]", 
+                    text.to_string().trim(),
+                    min_x / width as f32,
+                    min_y / height as f32,
+                    max_x / width as f32,
+                    max_y / height as f32
+                );
+                
                 // Only create result if we found patterns
                 if !normalized_line.is_empty() {
                     ocr_results.push(OcrResult {
@@ -205,7 +229,18 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
 
 /// Helper function to normalize text by converting plurals to singular form
 fn normalize_text(text: &str) -> String {
-    // First convert to lowercase
+    // Check for FIG references first and preserve them
+    let fig_regex = Regex::new(r"(?i)(FIG\.?)\s*([0-9]+[A-Z]?)\b").unwrap();
+    if let Some(cap) = fig_regex.captures(text) {
+        if let Some(number) = cap.get(2) {
+            let num_part = number.as_str().to_uppercase();
+            if num_part.contains('A') || num_part.contains('B') || num_part.contains('C') || num_part.contains('D') {
+                return format!("FIG.{}", num_part);
+            }
+        }
+    }
+    
+    // If not a FIG reference, convert to lowercase
     let text = text.to_lowercase();
     
     // Split into words
@@ -307,7 +342,7 @@ pub fn normalize_number(num: &str, allow_2: bool, allow_3: bool, allow_4: bool, 
     let label_regex = build_label_regex(allow_2, allow_3, allow_4, allow_letters, allow_hyphen);
     
     // Special handling for FIG. variations
-    let fig_regex = Regex::new(r"(?i)(FIG\.?)\s*([0-9]+[a-zA-Z]?(?:-[0-9]+)?)").unwrap();
+    let fig_regex = Regex::new(r"(?i)(FIG\.?)\s*([0-9]+[A-Z]?)\b").unwrap();
     if let Some(cap) = fig_regex.captures(num) {
         if let Some(number) = cap.get(2) {
             let number_str = number.as_str();
@@ -382,7 +417,7 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
         let label_regex = build_label_regex(allow_2, allow_3, allow_4, allow_letters, allow_hyphen);
         
         // Special handling for FIG. variations
-        let fig_regex = Regex::new(r"(?i)(FIG\.?)\s*([0-9]+[a-zA-Z]?(?:-[0-9]+)?)").unwrap();
+        let fig_regex = Regex::new(r"(?i)(FIG\.?)\s*([0-9]+[A-Z]?)\b").unwrap();
         if let Some(cap) = fig_regex.captures(num) {
             if let Some(number) = cap.get(2) {
                 let number_str = number.as_str();

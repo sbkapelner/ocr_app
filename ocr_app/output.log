@@ -1,0 +1,23 @@
+   Compiling ocr_app v0.1.0 (/Users/sbkapelner/Desktop/projects/ocr_app)
+error[E0425]: cannot find value `number` in this scope
+   --> src/lib.rs:151:44
+    |
+150 |                         if let Some(_number) = cap.get(2) {
+    |                                     ------- `_number` defined here
+151 |                             let num_part = number.as_str().to_uppercase();
+    |                                            ^^^^^^
+    |
+help: the leading underscore in `_number` marks it as unused, consider renaming it to `number`
+    |
+150 |                         if let Some(number) = cap.get(2) {
+    |                                     ~~~~~~
+
+error[E0599]: no method named `trim` found for reference `&ocrs::TextLine` in the current scope
+   --> src/lib.rs:205:26
+    |
+205 |                     text.trim(),
+    |                          ^^^^ method not found in `&TextLine`
+
+Some errors have detailed explanations: E0425, E0599.
+For more information about an error, try `rustc --explain E0425`.
+error: could not compile `ocr_app` (lib) due to 2 previous errors
