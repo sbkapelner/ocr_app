@@ -11,6 +11,9 @@ use docx_rs;
 
 pub mod models;
 
+// Regex pattern for matching FIG/Figure references
+static FIG_PATTERN: &str = r"(?i)\b(FIG\.?|FIGURE\.?|FIG|FIGURE)\s*([0-9]+)\s*([A-Za-z])?\b";
+
 /// Convert a PDF page to an RGB image
 pub fn pdf_page_to_image(doc: &Document, page_num: i32, dpi: f32) -> Result<RgbImage> {
     let page = doc.load_page(page_num)
@@ -140,7 +143,7 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
                 // Use the normalized line text for pattern matching
                 if normalized_line.chars().any(|c| c.is_ascii_digit()) {
                     // First look for FIG patterns in the line
-                    let fig_regex = Regex::new(r"(?i)\b(FIG\.?|F\.?|[F]IG\.?)\s*([0-9]+[A-Z]?)\b").unwrap();
+                    let fig_regex = Regex::new(FIG_PATTERN).unwrap();
                     // Also look for standalone number-letter combinations that might be figure references
                     let standalone_ref_regex = Regex::new(r"\b([0-9]+[A-Z])\b").unwrap();
                     let mut results = Vec::new();
@@ -230,7 +233,7 @@ pub fn process_page(engine: &OcrEngine, mut img: RgbImage) -> Result<Vec<OcrResu
 /// Helper function to normalize text by converting plurals to singular form
 fn normalize_text(text: &str) -> String {
     // Check for FIG references first and preserve them
-    let fig_regex = Regex::new(r"(?i)(FIG\.?)\s*([0-9]+[A-Z]?)\b").unwrap();
+    let fig_regex = Regex::new(FIG_PATTERN).unwrap();
     if let Some(cap) = fig_regex.captures(text) {
         if let Some(number) = cap.get(2) {
             let num_part = number.as_str().to_uppercase();
@@ -342,7 +345,7 @@ pub fn normalize_number(num: &str, allow_2: bool, allow_3: bool, allow_4: bool, 
     let label_regex = build_label_regex(allow_2, allow_3, allow_4, allow_letters, allow_hyphen);
     
     // Special handling for FIG. variations
-    let fig_regex = Regex::new(r"(?i)(FIG\.?)\s*([0-9]+[A-Z]?)\b").unwrap();
+    let fig_regex = Regex::new(FIG_PATTERN).unwrap();
     if let Some(cap) = fig_regex.captures(num) {
         if let Some(number) = cap.get(2) {
             let number_str = number.as_str();
@@ -385,24 +388,35 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
         .context("Failed to parse DOCX file")?;
 
     // Extract text and paragraphs from the document
+    println!("[DEBUG] Starting DOCX text extraction");
     let mut text = String::new();
     let mut paragraphs = Vec::new();
     let mut current_paragraph = String::new();
 
+    // Process each paragraph
     for child in docx.document.children {
         if let docx_rs::DocumentChild::Paragraph(para) = child {
-            for child in para.children {
-                if let docx_rs::ParagraphChild::Run(run) = child {
-                    for child in run.children {
-                        if let docx_rs::RunChild::Text(text_content) = child {
-                            text.push_str(&text_content.text);
-                            text.push(' ');
-                            current_paragraph.push_str(&text_content.text);
-                            current_paragraph.push(' ');
-                        }
+            // Extract all text from the paragraph
+            let para_text: String = para.children.iter()
+                .filter_map(|child| {
+                    if let docx_rs::ParagraphChild::Run(run) = child {
+                        Some(run.children.iter().filter_map(|child| {
+                            if let docx_rs::RunChild::Text(text) = child {
+                                Some(text.text.as_str())
+                            } else {
+                                None
+                            }
+                        }).collect::<Vec<_>>().join(""))
+                    } else {
+                        None
                     }
-                }
-            }
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            println!("[DEBUG] Paragraph text after joining: {}", para_text);
+            text.push_str(&para_text);
+            text.push('\n');
+            current_paragraph.push_str(&para_text);
             if !current_paragraph.trim().is_empty() {
                 paragraphs.push(current_paragraph.trim().to_string());
                 current_paragraph.clear();
@@ -411,51 +425,12 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
         }
     }
 
-    // Helper function to normalize a number
-    fn normalize_number(num: &str, allow_2: bool, allow_3: bool, allow_4: bool, allow_letters: bool, allow_hyphen: bool) -> String {
-        // Initialize regex pattern with provided options
-        let label_regex = build_label_regex(allow_2, allow_3, allow_4, allow_letters, allow_hyphen);
-        
-        // Special handling for FIG. variations
-        let fig_regex = Regex::new(r"(?i)(FIG\.?)\s*([0-9]+[A-Z]?)\b").unwrap();
-        if let Some(cap) = fig_regex.captures(num) {
-            if let Some(number) = cap.get(2) {
-                let number_str = number.as_str();
-                if label_regex.is_match(number_str) {
-                    // Normalize to consistent "FIG. " format
-                    return format!("FIG. {}", number_str);
-                }
-            }
-        }
-        
-        // Split input on whitespace
-        let tokens: Vec<&str> = num.split_whitespace().collect();
-        let mut results = Vec::new();
-        
-        for raw_token in tokens {
-            let cleaned = clean_token(raw_token);
-            if cleaned.is_empty() { continue; }
-            
-            if label_regex.is_match(&cleaned) {
-                results.push(cleaned);
-            } else {
-                // Try to split merged tokens
-                let split_parts = split_merged_label(&cleaned, &label_regex);
-                results.extend(split_parts);
-            }
-        }
-        
-        // Remove duplicates while preserving order
-        let mut seen = HashSet::new();
-        results.retain(|x| seen.insert(x.clone()));
-        
-        results.join(" ")
-    }
+    println!("[DEBUG] Final collected text:\n{}", text);
 
     // Create regex patterns
     let word_pattern = Regex::new(r"\b(\w+)\s+([^\s]*[0-9][^\s]*)\b")
         .context("Failed to create word pattern")?;
-    let fig_pattern = Regex::new(r"(?i)\b(FIG\.?)\s*([0-9]+[a-zA-Z]?(?:-[0-9]+)?)\b")
+    let fig_pattern = Regex::new(FIG_PATTERN)
         .context("Failed to create FIG pattern")?;
 
     // Extract full matches and their numbers
@@ -466,15 +441,27 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
     // Keep track of the last meaningful noun for "and NUMBER" cases
     let mut last_noun = String::new();
 
-    // First process FIG patterns - don't validate numbers in FIG references
-    for cap in fig_pattern.captures_iter(&text) {
-        let raw_number = cap.get(2).unwrap().as_str().trim();
-        let full_match = format!("FIG. {}", raw_number);
-        let normalized_key = full_match.clone();
-        if normalized_matches.insert(normalized_key) {
-            full_matches.push(full_match);
-            // Store the full FIG. X format in numbers set too
-            numbers.insert(format!("FIG. {}", raw_number));
+    // First process FIG patterns
+    println!("[DEBUG] Processing text for FIG patterns:");
+    for paragraph in text.split('\n') {
+        println!("[DEBUG] Processing paragraph: {}", paragraph);
+        for cap in fig_pattern.captures_iter(paragraph) {
+            println!("[DEBUG] Found capture: {:?}", cap.iter().map(|m| m.map(|m| m.as_str())).collect::<Vec<_>>());
+            let number = cap.get(2).unwrap().as_str().trim();
+            let letter = cap.get(3).map(|m| m.as_str().trim());
+            
+            let fig_text = if let Some(letter) = letter {
+                format!("FIG. {}{}", number, letter)
+            } else {
+                format!("FIG. {}", number)
+            };
+            
+            println!("[DEBUG] Found FIG match: {}", fig_text);
+            if normalized_matches.insert(fig_text.clone()) {
+                println!("[DEBUG] Adding FIG match: {}", fig_text);
+                full_matches.push(fig_text.clone());
+                numbers.insert(fig_text);
+            }
         }
     }
     
@@ -487,8 +474,8 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
             continue;
         }
         
-        // Skip unwanted prefixes
-        if word.eq_ignore_ascii_case("about") || word.eq_ignore_ascii_case("of") {
+        // Skip unwanted prefixes and FIG references
+        if word.eq_ignore_ascii_case("about") || word.eq_ignore_ascii_case("of") || word.eq_ignore_ascii_case("fig") || word.eq_ignore_ascii_case("figure") {
             continue;
         }
         
