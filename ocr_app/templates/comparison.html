@@ -47,8 +47,7 @@
 </head>
 <body>
     <div class="container">
-        <div class="d-flex justify-content-end gap-2 mb-3">
-            <button class="btn btn-danger" onclick="resetState()">Reset to Original</button>
+        <div class="d-flex justify-content-end mb-3">
             <button class="btn btn-primary" onclick="saveState()">Save State</button>
         </div>
         <div class="table-container">
@@ -95,20 +94,7 @@
             return parseInt(numA) - parseInt(numB);
         });
 
-        // Store original state for reset functionality
-        const originalState = {
-            pdf: {},
-            docx: {}
-        };
 
-        // Set up original state
-        uniquePdfNumbers.forEach(number => {
-            originalState.pdf[number] = docxNumbers.includes(number);
-        });
-        docxMatches.forEach((match, index) => {
-            const number = docxNumbers[index];
-            originalState.docx[match] = uniquePdfNumbers.includes(number);
-        });
         
         // Load saved states
         const savedState = JSON.parse(localStorage.getItem('ocrComparisonState') || '{}');
@@ -232,29 +218,7 @@
             // Show success message
             alert('State saved successfully!');
         }
-        function resetState() {
-            // Reset PDF checkboxes
-            document.querySelectorAll('.pdf-checkbox').forEach(checkbox => {
-                const number = checkbox.dataset.number;
-                checkbox.checked = originalState.pdf[number];
-            });
-            
-            // Reset DOCX checkboxes
-            document.querySelectorAll('.docx-checkbox').forEach(checkbox => {
-                const match = checkbox.dataset.match;
-                checkbox.checked = originalState.docx[match];
-            });
-            
-            // Clear saved state for this file pair
-            const state = JSON.parse(localStorage.getItem('ocrComparisonState') || '{}');
-            if (state[stateKey]) {
-                delete state[stateKey];
-                localStorage.setItem('ocrComparisonState', JSON.stringify(state));
-            }
-            
-            // Show success message
-            alert('Reset to original state!');
-        }
+
     </script>
 </body>
 </html>
