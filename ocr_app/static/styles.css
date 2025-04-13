@@ -21,6 +21,17 @@ html, body {
     z-index: 1000;
 }
 
+.title-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.app-logo {
+    height: 42px;
+    width: auto;
+}
+
 .title-bar h1 {
     margin: 0;
     font-size: 1.5rem;
