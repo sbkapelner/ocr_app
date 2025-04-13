@@ -261,13 +261,14 @@ fn normalize_text(text: &str) -> String {
             }
             
             // Rule 2: words ending in 'es' -> remove 'es'
-            if w.ends_with("es") {
+            if w.ends_with("es") && w.len() > 3 {
                 // Special case: if word ends in 'xes', 'ches', 'shes', 'sses'
                 if w.ends_with("xes") || w.ends_with("ches") || 
                    w.ends_with("shes") || w.ends_with("sses") {
                     return w[..w.len()-2].to_string();
                 }
-                return w[..w.len()-2].to_string();
+                // For other cases like 'surfaces', remove just the 's'
+                return w[..w.len()-1].to_string();
             }
             
             // Rule 3: words ending in 's' -> remove 's'
@@ -449,6 +450,7 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
 
     // Keep track of the last meaningful noun for "and NUMBER" cases
     let mut last_noun = String::new();
+    let mut last_noun_normalized = String::new();
 
     // First process FIG patterns
     println!("[DEBUG] Processing text for FIG patterns:");
@@ -475,7 +477,7 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
     }
     
     for cap in word_pattern.captures_iter(&text) {
-        let word = normalize_text(cap.get(1).unwrap().as_str().trim());
+        let original_word = cap.get(1).unwrap().as_str().trim();
         let raw_number = cap.get(2).unwrap().as_str().trim();
         
         // Skip if the raw number doesn't contain any digits
@@ -483,16 +485,20 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
             continue;
         }
         
+        // Normalize word for comparison
+        let normalized_word = normalize_text(original_word);
+        
         // Skip unwanted patterns
-        if word.eq_ignore_ascii_case("to") ||
-           word.eq_ignore_ascii_case("than") ||
-           word.eq_ignore_ascii_case("as") ||
-           word.eq_ignore_ascii_case("the") {
+        if normalized_word.eq_ignore_ascii_case("to") ||
+           normalized_word.eq_ignore_ascii_case("than") ||
+           normalized_word.eq_ignore_ascii_case("as") ||
+           normalized_word.eq_ignore_ascii_case("the") {
             continue;
         }
         
         // Skip unwanted prefixes and FIG references
-        if word.eq_ignore_ascii_case("about") || word.eq_ignore_ascii_case("of") || word.eq_ignore_ascii_case("fig") || word.eq_ignore_ascii_case("figure") {
+        if normalized_word.eq_ignore_ascii_case("about") || normalized_word.eq_ignore_ascii_case("of") || 
+           normalized_word.eq_ignore_ascii_case("fig") || normalized_word.eq_ignore_ascii_case("figure") {
             continue;
         }
         
@@ -501,20 +507,25 @@ pub fn process_docx(_engine: &OcrEngine, docx_path: impl AsRef<Path>, allow_2: b
             continue;
         }
         
-        let mut full_match = cap.get(0).unwrap().as_str().trim().to_string();
-        
         // Handle "and NUMBER" and "or NUMBER" cases
-        let is_conjunction = word.eq_ignore_ascii_case("and") || word.eq_ignore_ascii_case("or");
-        if is_conjunction && !last_noun.is_empty() {
-            full_match = format!("{} {}", last_noun, raw_number);
-        } else if !is_conjunction {
-            // Update last noun for next iteration
-            last_noun = word.clone();
-        }
+        let is_conjunction = normalized_word.eq_ignore_ascii_case("and") || normalized_word.eq_ignore_ascii_case("or");
         
-        // Create a normalized key for deduplication using normalized word
-        let normalized_word = normalize_text(if is_conjunction { &last_noun } else { &word });
-        let normalized_key = format!("{} {}", normalized_word, normalized_number);
+        // Get the display word and normalized word for this match
+        let (display_word, normalized_key_word) = if is_conjunction && !last_noun.is_empty() {
+            (last_noun.as_str(), last_noun_normalized.as_str())
+        } else {
+            (original_word, normalized_word.as_str())
+        };
+
+        // Create the display match and normalized key
+        let full_match = format!("{} {}", display_word, raw_number);
+        let normalized_key = format!("{} {}", normalized_key_word, normalized_number);
+        
+        // Update last noun for next iteration if not a conjunction
+        if !is_conjunction {
+            last_noun = original_word.to_string();
+            last_noun_normalized = normalized_word.clone();
+        }
         
         // Only add if we haven't seen this normalized match before
         if normalized_matches.insert(normalized_key) {
