@@ -1,4 +1,7 @@
 /target/
+/models/
+/Folder_100_png/
+/tests/
 *.pdf
 *.png
 debug.log
