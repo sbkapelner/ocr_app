@@ -97,16 +97,16 @@ I built some software that is still in its early stages and I'm looking to prese
 | 142-1<br>132-1<br>102<br>50-1<br>131-1<br>130-=<br>130-2<br>140-1=<br>140-2<br>160-1<br>167-1<br>50-2<br>165-2<br>165-1<br>131-2<br>167-2<br>160-2<br>141-2<br>113-<br>1442<br>142-2<br>150-3<br>132-2<br>FIG. 1B | 142-1<br>132-1<br>102<br>50-1<br>131-1<br>130<br>130-2<br>140-1<br>140-2<br>160-1<br>167-1<br>50-2<br>165-2<br>165-1<br>131-2<br>167-2<br>160-2<br>141-2<br>113<br>1442<br>142-2<br>150-3<br>132-2<br>FIG. 1B |
 
 ## Performance Metrics
-
-<img width="1979" height="1180" alt="output" src="https://github.com/user-attachments/assets/5709385f-aeec-4e2c-8b62-34dbb22afebb" />
-Precision = What fraction of detected text regions are actually text regions?
-Recall = How many text regions out of the total text regions in the image did we find?
-
-<img width="1979" height="1180" alt="output (1)" src="https://github.com/user-attachments/assets/9469db6e-433f-4d85-b946-120262a2f9bc" />
-Loss = how wrong the model is
-
-<img width="521" height="257" alt="image" src="https://github.com/user-attachments/assets/ffe91b85-eb4c-469f-97e8-35ffd4bc57d7" />
+Recall = How many text regions out of the total text regions in the image did we find?<br>
+Precision = What fraction of detected text regions are actually text regions?<br>
+Loss = how wrong the model is<br>
 CER = incorrectly identified character/total characters, e.g., "Hello World" vs. "Helo Wrld"
 
-<img width="521" height="310" alt="image" src="https://github.com/user-attachments/assets/b78eae0d-6d5b-48b8-9319-f0caaef2c2da" />
-Loss = how wrong the model is
+<img width="1979" height="1180" alt="output" src="https://github.com/user-attachments/assets/5709385f-aeec-4e2c-8b62-34dbb22afebb" />
+
+<img width="1979" height="1180" alt="output (1)" src="https://github.com/user-attachments/assets/9469db6e-433f-4d85-b946-120262a2f9bc" />
+
+<img width="520" height="258" alt="Screenshot 2025-08-05 135958" src="https://github.com/user-attachments/assets/1149b4c0-797b-4913-a3ba-bac6b5a92ad8" />
+
+<img width="521" height="310" alt="Screenshot 2025-08-05 135918" src="https://github.com/user-attachments/assets/43737504-f56b-40de-a913-b4483cba7a5c" />
+
