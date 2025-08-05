@@ -51,7 +51,7 @@ I built some software that is still in its early stages and I'm looking to prese
 - CER 
 
 ## Comparison with Open Source Models
-#### OCRS by Robert Knight Fine-Tuned (my model)
+#### OCRS by Robert Knight Fine-Tuned (the OCR model I fine-tuned for patent drawings)
 <img width="781" height="498" alt="Pasted image 20250514101641" src="https://github.com/user-attachments/assets/d0575d60-b0dc-4a07-9563-3c7a5286980d" />
 
 
@@ -109,4 +109,5 @@ CER = incorrectly identified character/total characters, e.g., "Hello World" vs.
 <img width="520" height="258" alt="Screenshot 2025-08-05 135958" src="https://github.com/user-attachments/assets/1149b4c0-797b-4913-a3ba-bac6b5a92ad8" />
 
 <img width="521" height="310" alt="Screenshot 2025-08-05 135918" src="https://github.com/user-attachments/assets/43737504-f56b-40de-a913-b4483cba7a5c" />
+
 
